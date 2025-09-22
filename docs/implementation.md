@@ -25,11 +25,11 @@ A Chrome extension that applies real-time audio effects (delay, bitcrusher, phas
 **Goal**: Establish MV3 extension structure with working tab audio capture
 
 #### Deliverables:
-- [ ] Plasmo project setup with TypeScript
-- [ ] MV3 manifest with required permissions (`tabCapture`, `offscreen`)
-- [ ] Service worker with basic tab capture functionality
-- [ ] Offscreen document creation and lifecycle management
-- [ ] Basic popup UI with "Capture Tab" button
+- [x] Plasmo project setup with TypeScript
+- [x] MV3 manifest with required permissions (`tabCapture`, `offscreen`)
+- [x] Service worker with basic tab capture functionality
+- [x] Offscreen document creation and lifecycle management
+- [x] Basic popup UI with "Capture Tab" button
 
 #### Testing Criteria:
 - Extension loads without errors in Chrome
@@ -43,7 +43,7 @@ A Chrome extension that applies real-time audio effects (delay, bitcrusher, phas
 - Must handle MediaStream transfer between service worker and offscreen
 
 #### Post-Phase 1:
-- [ ] Create README.md with project description, build instructions, and usage guide
+- [x] Create README.md with project description, build instructions, and usage guide
 
 ---
 
@@ -51,11 +51,11 @@ A Chrome extension that applies real-time audio effects (delay, bitcrusher, phas
 **Goal**: Route captured audio through Web Audio API and play it back
 
 #### Deliverables:
-- [ ] Web Audio graph setup in offscreen document
-- [ ] MediaStreamAudioSourceNode → MediaStreamDestination connection
-- [ ] Audio playback via `<audio>` element
-- [ ] Basic error handling for capture failures
-- [ ] "Bypass/Stop Processing" panic button
+- [x] Web Audio graph setup in offscreen document
+- [x] MediaStreamAudioSourceNode → MediaStreamDestination connection
+- [x] Audio playback via `<audio>` element
+- [x] Basic error handling for capture failures
+- [x] "Bypass/Stop Processing" panic button
 
 #### Testing Criteria:
 - Captured tab audio plays back without noticeable latency
@@ -71,26 +71,29 @@ A Chrome extension that applies real-time audio effects (delay, bitcrusher, phas
 
 ---
 
-### Phase 3: Single Effect Implementation (Delay)
-**Goal**: Implement first audio effect with parameter controls
+### Phase 3: Single Effect Implementation (Bitcrusher)
+**Goal**: Implement bitcrusher effect with intuitive parameter controls
 
 #### Deliverables:
-- [ ] Tone.js integration for FeedbackDelay
-- [ ] Popup UI with delay controls (time, feedback, wet/dry mix)
+- [ ] Tone.js integration for BitCrusher effect
+- [ ] Professional UI with webaudio-controls knobs
+- [ ] Key bitcrusher parameters: bit depth, sample rate reduction, wet/dry mix
 - [ ] Parameter communication between popup and offscreen
 - [ ] Real-time parameter updates without audio interruption
 
 #### Testing Criteria:
-- Delay effect audibly works with various settings
-- Parameter changes respond immediately
+- Bitcrusher effect produces characteristic lo-fi distortion
+- Parameter changes respond immediately and smoothly
 - No audio dropouts when adjusting controls
 - Settings persist during tab switches
-- Extreme parameter values don't break audio
+- Works well with various audio sources (music, speech, complex sounds)
+- Extreme parameter values produce usable creative effects
 
 #### Technical Notes:
 - Use `chrome.runtime.sendMessage` for parameter updates
-- Debounce rapid parameter changes
-- Validate parameter ranges
+- Debounce rapid parameter changes to avoid audio glitches
+- Validate parameter ranges to prevent system overload
+- Consider using webaudio-controls for professional knob UI
 
 ---
 

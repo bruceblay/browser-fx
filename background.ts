@@ -11,8 +11,11 @@ async function ensureOffscreenDocument() {
   })
 
   if (existingContexts.length > 0) {
+    console.log("Offscreen document already exists")
     return
   }
+
+  console.log("Creating offscreen document...")
 
   // Create offscreen document
   await chrome.offscreen.createDocument({
@@ -20,48 +23,61 @@ async function ensureOffscreenDocument() {
     reasons: ['AUDIO_PLAYBACK'],
     justification: 'Process tab audio with Web Audio API'
   })
+
+  console.log("Offscreen document created")
+
+  // Wait a moment for the document to initialize
+  await new Promise(resolve => setTimeout(resolve, 100))
 }
 
 // Handle messages from popup
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   console.log("Background received message:", message)
 
-  if (message.type === "CAPTURE_TAB") {
+  if (message.type === "SETUP_OFFSCREEN") {
     try {
-      // Get the current active tab
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-
-      if (!activeTab?.id) {
-        throw new Error("No active tab found")
-      }
-
-      console.log("Capturing audio from tab:", activeTab.id)
-
-      // Capture tab audio (requires user gesture)
-      const stream = await chrome.tabCapture.capture({
-        audio: true,
-        video: false
-      })
-
-      if (!stream) {
-        throw new Error("Failed to capture tab audio")
-      }
-
-      console.log("Audio stream captured:", stream)
-
       // Ensure offscreen document exists
       await ensureOffscreenDocument()
+      sendResponse({ success: true, message: "Offscreen document ready" })
+    } catch (error) {
+      console.error("Error setting up offscreen:", error)
+      sendResponse({ success: false, error: error.message })
+    }
+  }
 
-      // Send stream to offscreen document for processing
+  if (message.type === "PROCESS_STREAM") {
+    try {
+      // Ensure offscreen document exists before forwarding
+      await ensureOffscreenDocument()
+
+      // Forward stream processing message to offscreen document
+      console.log("Forwarding PROCESS_STREAM to offscreen:", message.streamId)
       chrome.runtime.sendMessage({
         type: "PROCESS_STREAM",
-        streamId: stream.id,
-        tabId: activeTab.id
+        streamId: message.streamId,
+        tabId: message.tabId
       })
-
-      sendResponse({ success: true, message: "Audio capture started" })
+      sendResponse({ success: true, message: "Stream processing forwarded to offscreen" })
     } catch (error) {
-      console.error("Error capturing tab audio:", error)
+      console.error("Error forwarding stream processing:", error)
+      sendResponse({ success: false, error: error.message })
+    }
+  }
+
+  if (message.type === "UPDATE_EFFECT_PARAMS") {
+    try {
+      // Ensure offscreen document exists before forwarding
+      await ensureOffscreenDocument()
+
+      // Forward parameter updates to offscreen document
+      console.log("Forwarding UPDATE_EFFECT_PARAMS to offscreen:", message.params)
+      chrome.runtime.sendMessage({
+        type: "UPDATE_EFFECT_PARAMS",
+        params: message.params
+      })
+      sendResponse({ success: true, message: "Effect parameters forwarded to offscreen" })
+    } catch (error) {
+      console.error("Error forwarding effect parameters:", error)
       sendResponse({ success: false, error: error.message })
     }
   }

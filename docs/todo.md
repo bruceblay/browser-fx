@@ -1,0 +1,3 @@
+- better design
+- faders look bad - colors etc.
+- 
