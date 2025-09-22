@@ -70,13 +70,16 @@ export function ActionButtons({
 
       <button
         onClick={onClearStreams}
+        disabled={false}
         style={{
           ...buttonBaseStyle,
           background: 'rgba(255,255,255,0.1)',
           color: 'rgba(255,255,255,0.7)',
           border: '2px solid rgba(255,255,255,0.2)',
           fontSize: 14,
-          marginRight: 0
+          marginRight: 0,
+          cursor: 'pointer',
+          opacity: 1
         }}
         onMouseOver={(e) => {
           e.currentTarget.style.background = 'rgba(255,255,255,0.2)'

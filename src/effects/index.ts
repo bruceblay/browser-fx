@@ -9,7 +9,7 @@ import { pingPongDelayConfig } from './pingpongdelay'
 import { vibratoConfig } from './vibrato'
 import { autoFilterConfig } from './autofilter'
 
-// Registry of all available effects
+// Registry of all available effects (NOTE: NOT using autoWah - using tremolo, pingpongdelay, vibrato, autofilter)
 export const EFFECTS: Record<string, EffectConfig> = {
   [bitcrusherConfig.id]: bitcrusherConfig,
   [reverbConfig.id]: reverbConfig,

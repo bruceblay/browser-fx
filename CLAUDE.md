@@ -35,9 +35,20 @@ Chrome extension that applies real-time bitcrusher audio effects to browser tab 
 3. Always verify offscreen files are copied to build directory
 4. Message flow: popup → background → offscreen (all async)
 5. Offscreen document must exist before sending messages to it
+6. When user says something is "broken" - fix FUNCTIONALITY first, not styling
+7. Read user requirements carefully - don't make assumptions about what needs fixing
+8. Match message types exactly between background script and offscreen document
+
+## Recent Fixes & Lessons
+**Clear All Streams Button Fix (2025-01-23)**:
+- Problem: Clear All Streams button wasn't actually clearing streams
+- Root cause: Offscreen document missing `CLEAR_ALL_STREAMS` message handler
+- Solution: Added handler in offscreen-effects.js that calls `cleanup()` function
+- Lesson: Always verify message handlers exist in offscreen document for new message types
 
 ## Last Known Working Configuration
-- Dynamic bitcrusher parameters working
-- Real-time slider control implemented
+- Multiple audio effects (bitcrusher, reverb, distortion, chorus, phaser, tremolo, etc.)
+- Real-time parameter control with sliders
+- Clear All Streams button properly clears audio streams
 - Build script automation added
 - All three components (popup, background, offscreen) communicating properly

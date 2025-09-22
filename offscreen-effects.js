@@ -753,6 +753,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     sendResponse({ success: true, message: "Processing stopped" })
   }
 
+  if (message.type === "STOP_STREAM") {
+    cleanup()
+    sendResponse({ success: true, message: "Stream stopped" })
+  }
+
+  if (message.type === "CLEAR_ALL_STREAMS") {
+    cleanup()
+    sendResponse({ success: true, message: "All streams cleared" })
+  }
+
   if (message.type === "UPDATE_EFFECT_PARAMS") {
     updateEffectParams(message.effectId, message.params)
     sendResponse({ success: true, message: "Parameters updated" })

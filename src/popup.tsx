@@ -18,7 +18,17 @@ function IndexPopup() {
 
   const handleEffectChange = (effectId: string) => {
     setSelectedEffect(effectId)
-    setEffectParams(getEffectDefaults(effectId))
+    const newParams = getEffectDefaults(effectId)
+    setEffectParams(newParams)
+
+    // If currently capturing, switch the effect in the offscreen document
+    if (isCapturing) {
+      chrome.runtime.sendMessage({
+        type: "SWITCH_EFFECT",
+        effectId: effectId,
+        params: newParams
+      })
+    }
   }
 
   const handleParamUpdate = (param: string, value: number) => {
@@ -55,6 +65,7 @@ function IndexPopup() {
   }
 
   const handleClearStreams = () => {
+    setIsCapturing(false)
     chrome.runtime.sendMessage({
       type: "CLEAR_ALL_STREAMS"
     })
