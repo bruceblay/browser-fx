@@ -1,3 +1,4 @@
 - better design
 - faders look bad - colors etc.
+- reverb defaults should be better, state not saving
 - 

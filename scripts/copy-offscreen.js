@@ -6,7 +6,7 @@ const path = require('path')
 // Copy offscreen files to build directory
 const sourceFiles = [
   'offscreen.html',
-  'offscreen-simple.js'
+  'offscreen-effects.js'
 ]
 
 const buildDir = path.join(__dirname, '../build/chrome-mv3-dev')

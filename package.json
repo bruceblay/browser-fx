@@ -1,6 +1,6 @@
 {
-  "name": "tab-bitcrusher",
-  "displayName": "Tab Bitcrusher",
+  "name": "browser-fx",
+  "displayName": "Browser FX",
   "version": "0.0.1",
   "description": "Chrome extension that applies real-time audio effects to browser tabs",
   "author": "Plasmo Corp. <foss@plasmo.com>",
