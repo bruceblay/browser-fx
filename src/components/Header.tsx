@@ -8,10 +8,9 @@ export function Header({ onInfoClick }: HeaderProps) {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 16
     }}>
       <h1 style={{
-        fontSize: 28,
+        fontSize: 18,
         fontWeight: 'bold',
         margin: 0,
         background: 'linear-gradient(45deg, #fff, #e0e0ff)',
@@ -24,8 +23,8 @@ export function Header({ onInfoClick }: HeaderProps) {
       <button
         onClick={onInfoClick}
         style={{
-          width: 32,
-          height: 32,
+          width: 24,
+          height: 24,
           borderRadius: '50%',
           border: '2px solid rgba(255,255,255,0.3)',
           background: 'rgba(255,255,255,0.1)',

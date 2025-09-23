@@ -68,6 +68,17 @@ function IndexPopup() {
     saveState()
   }, [currentTabId, selectedEffect, effectParams, isCapturing])
 
+  // Remove body margin
+  useEffect(() => {
+    document.body.style.margin = '0'
+    document.body.style.padding = '0'
+
+    return () => {
+      document.body.style.margin = ''
+      document.body.style.padding = ''
+    }
+  }, [])
+
   const handleEffectChange = (effectId: string) => {
     setSelectedEffect(effectId)
     const newParams = getEffectDefaults(effectId)
@@ -142,10 +153,10 @@ function IndexPopup() {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      <div style={{ padding: '20px 24px' }}>
+      <div style={{ padding: '14px 18px' }}>
         <Header onInfoClick={() => setShowAbout(true)} />
 
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 8 }}>
           <label style={{
             display: 'block',
             marginBottom: 8,
@@ -161,7 +172,7 @@ function IndexPopup() {
           />
         </div>
 
-        <div style={{ marginTop: 24 }}>
+        <div>
           <EffectControls
             effectConfig={currentEffectConfig}
             effectParams={effectParams}
@@ -170,7 +181,7 @@ function IndexPopup() {
           />
         </div>
 
-        <div style={{ marginTop: 32 }}>
+        <div style={{ marginTop: 4 }}>
           <ActionButtons
             isCapturing={isCapturing}
             onCapture={handleStartCapture}

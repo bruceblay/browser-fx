@@ -1,58 +1,114 @@
 interface AboutViewProps {
-  onClose: () => void
+  onBack: () => void
 }
 
-export function AboutView({ onClose }: AboutViewProps) {
+export function AboutView({ onBack }: AboutViewProps) {
   return (
-    <div className="about-container">
-      <div className="about-header">
-        <h2 className="about-title">About Browser FX</h2>
+    <div style={{
+      padding: '14px 16px',
+      color: 'white',
+      height: '100%',
+      minHeight: '600px',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <h1 style={{
+          fontSize: 18,
+          fontWeight: 'bold',
+          margin: 0,
+          marginBottom: '8px',
+          background: 'linear-gradient(45deg, #fff, #e0e0ff)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text'
+        }}>
+          About Browser FX
+        </h1>
         <button
-          onClick={onClose}
-          className="close-button"
+          onClick={onBack}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.3)',
+            background: 'rgba(255,255,255,0.1)',
+            color: 'white',
+            fontSize: 16,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease'
+          }}
+          title="Back to main view"
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.2)'
+            e.currentTarget.style.transform = 'scale(1.05)'
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+            e.currentTarget.style.transform = 'scale(1)'
+          }}
         >
           ✕
         </button>
       </div>
 
-      <div className="about-content">
-        <p><strong>Browser FX</strong> is a real-time audio effects processor for web pages.</p>
+      <div style={{ color: 'white', lineHeight: '1.6' }}>
+        <p style={{ margin: '0 0 4px 0' }}><strong>Browser FX</strong> is a real-time audio effects processor for web pages.</p>
 
-        <h4 className="about-section-title">Available Effects:</h4>
-        <ul className="about-list">
-          <li><strong>Bitcrusher</strong> - Digital degradation and lo-fi sounds</li>
-          <li><strong>Reverb</strong> - Spacious ambient reverb</li>
-          <li><strong>Distortion</strong> - Waveshaping distortion with tone control</li>
-          <li><strong>Chorus</strong> - Rich modulated doubling effect</li>
-          <li><strong>Phaser</strong> - Classic sweeping phase modulation</li>
-          <li><strong>Tremolo</strong> - Amplitude modulation with rate and depth</li>
-          <li><strong>Ping Pong Delay</strong> - Stereo bouncing delay effect</li>
-          <li><strong>Vibrato</strong> - Pitch modulation with multiple waveforms</li>
-          <li><strong>Auto Filter</strong> - LFO-controlled filter sweeps</li>
+        <h4 style={{ color: 'white', margin: '4px 0 10px 0', fontSize: 14, fontWeight: 600 }}>Available Effects:</h4>
+        <ul style={{ color: 'white', paddingLeft: 20, margin: '0 0 6px 0' }}>
+          <li style={{ marginBottom: 8 }}><strong>Bitcrusher</strong> - Digital degradation and lo-fi sounds</li>
+          <li style={{ marginBottom: 8 }}><strong>Reverb</strong> - Spacious ambient reverb</li>
+          <li style={{ marginBottom: 8 }}><strong>Distortion</strong> - Waveshaping distortion with tone control</li>
+          <li style={{ marginBottom: 8 }}><strong>Chorus</strong> - Rich modulated doubling effect</li>
+          <li style={{ marginBottom: 8 }}><strong>Phaser</strong> - Classic sweeping phase modulation</li>
+          <li style={{ marginBottom: 8 }}><strong>Tremolo</strong> - Amplitude modulation with rate and depth</li>
+          <li style={{ marginBottom: 8 }}><strong>Ping Pong Delay</strong> - Stereo bouncing delay effect</li>
+          <li style={{ marginBottom: 8 }}><strong>Vibrato</strong> - Pitch modulation with multiple waveforms</li>
+          <li style={{ marginBottom: 8 }}><strong>Auto Filter</strong> - LFO-controlled filter sweeps</li>
         </ul>
 
-        <h4 className="about-section-title">How to Use:</h4>
-        <ol className="about-list">
-          <li>Choose an audio effect from the dropdown</li>
-          <li>Click "Capture Tab Audio" to start processing</li>
-          <li>Adjust parameters in real-time with the sliders</li>
-          <li>Click "Stop Capture" when finished</li>
+        <h4 style={{ color: 'white', margin: '6px 0 10px 0', fontSize: 14, fontWeight: 600 }}>How to Use:</h4>
+        <ol style={{ color: 'white', paddingLeft: 20, margin: '0 0 6px 0' }}>
+          <li style={{ marginBottom: 8 }}>Choose an audio effect from the dropdown</li>
+          <li style={{ marginBottom: 8 }}>Click "Start" to begin processing</li>
+          <li style={{ marginBottom: 8 }}>Adjust parameters in real-time with the sliders</li>
+          <li style={{ marginBottom: 8 }}>Click "Stop" when finished</li>
         </ol>
 
-        <div className="credits-box">
+        <div style={{
+          background: 'rgba(255,255,255,0.1)',
+          padding: 16,
+          borderRadius: 8,
+          marginBottom: 16,
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
           <strong>Credits:</strong> Most effects are inspired by and based on implementations from{" "}
           <a
             href="https://tonejs.github.io/"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#0066cc", textDecoration: "underline" }}
+            style={{ color: "#87ceeb", textDecoration: "underline" }}
           >
             Tone.js
           </a>
           , an excellent Web Audio framework by Yotam Mann. Thank you to the Tone.js team for their incredible work on Web Audio abstractions and effect implementations.
         </div>
 
-        <div className="tech-note-box">
+        <div style={{
+          background: 'rgba(255,255,255,0.1)',
+          padding: 16,
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
           <strong>Technical Note:</strong> All effects are processed in real-time using the Web Audio API.
           Audio processing happens locally in your browser - no data is sent to external servers.
         </div>

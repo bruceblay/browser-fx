@@ -13,12 +13,11 @@ export function EffectSelector({ selectedEffect, onEffectChange }: EffectSelecto
         onChange={(e) => onEffectChange(e.target.value)}
         style={{
           width: '100%',
-          padding: '12px 16px',
+          padding: '6px 6px',
           borderRadius: 8,
-          border: '2px solid rgba(255,255,255,0.2)',
           background: 'rgba(255,255,255,0.1)',
           color: 'white',
-          fontSize: 16,
+          fontSize: 12,
           cursor: 'pointer',
           outline: 'none',
           backdropFilter: 'blur(10px)'

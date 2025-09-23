@@ -18,9 +18,9 @@ export function EffectControls({
   }
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 4 }}>
       <h4 style={{
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: 600,
         marginBottom: 12,
         color: 'rgba(255,255,255,0.9)'
@@ -39,11 +39,11 @@ export function EffectControls({
         }
 
         return (
-          <div key={param.key} style={{ marginBottom: 16 }}>
+          <div key={param.key} style={{ marginBottom: 8 }}>
             <label style={{
               display: 'block',
               marginBottom: 6,
-              fontSize: 14,
+              fontSize: 12,
               color: 'rgba(255,255,255,0.8)'
             }}>
               {param.label}: {displayValue}{param.unit === '%' ? '%' : (param.unit || '')}
@@ -57,7 +57,7 @@ export function EffectControls({
               onChange={(e) => onParamUpdate(param.key, parseFloat(e.target.value))}
               style={{
                 width: '100%',
-                accentColor: index === 0 ? "#007bff" : index === 1 ? "#28a745" : "#ffc107"
+                accentColor: "#87ceeb"
               }}
               disabled={!isCapturing}
             />
@@ -69,7 +69,8 @@ export function EffectControls({
         fontSize: 12,
         color: 'rgba(255,255,255,0.6)',
         fontStyle: 'italic',
-        marginTop: 8
+        marginTop: 8,
+        marginBottom: 8,
       }}>
         {!isCapturing
           ? "Controls will be active when audio capture is running"
