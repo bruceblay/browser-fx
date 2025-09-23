@@ -56,7 +56,8 @@ export function ActionButtons({
           onClick={onCapture}
           style={{
             ...buttonBaseStyle,
-            background: 'linear-gradient(45deg, #6a5acd, #87ceeb)',
+            background: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.25)',
             color: 'white',
             marginRight: 0,
             flex: 1
@@ -69,7 +70,8 @@ export function ActionButtons({
           onClick={onStop}
           style={{
             ...buttonBaseStyle,
-            background: 'linear-gradient(45deg, #8b4aa6, #b19cd9)',
+            background: 'rgba(220,53,69,0.15)',
+            border: '1px solid rgba(220,53,69,0.3)',
             color: 'white',
             marginRight: 0,
             flex: 1
