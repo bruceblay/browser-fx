@@ -23,7 +23,7 @@ async function ensureOffscreenDocument() {
   const offscreenUrl = `chrome-extension://${extensionId}/offscreen.html`
   console.log("Offscreen document created")
   console.log("🔍 TO DEBUG OFFSCREEN: Navigate to:", offscreenUrl)
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise(resolve => setTimeout(resolve, 50))
 }
 
 // Handle messages from popup
@@ -34,17 +34,30 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     try {
       console.log("Processing START_CAPTURE request")
 
-      // Ensure offscreen document exists
-      await ensureOffscreenDocument()
-
-      // Get the active tab
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      // Parallelize offscreen creation and tab query for speed
+      const [_, [activeTab]] = await Promise.all([
+        ensureOffscreenDocument(),
+        chrome.tabs.query({ active: true, currentWindow: true })
+      ])
 
       if (!activeTab || !activeTab.id) {
         throw new Error("No active tab found")
       }
 
       console.log("Active tab found:", activeTab.id)
+
+      // Quick cleanup attempt (don't wait for response to avoid timeout)
+      console.log("Attempting quick cleanup for tab:", activeTab.id)
+      try {
+        chrome.runtime.sendMessage({
+          type: "STOP_STREAM",
+          tabId: activeTab.id
+        }).catch(() => {
+          console.log("Quick cleanup message failed (expected if no offscreen yet)")
+        })
+      } catch (error) {
+        console.log("Quick cleanup failed:", error)
+      }
 
       // Capture tab audio using correct MV3 API
       const streamId = await chrome.tabCapture.getMediaStreamId()
@@ -63,9 +76,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.log("Found offscreen contexts:", offscreenContexts.length)
 
       if (offscreenContexts.length > 0) {
-        // Wait a moment for offscreen document to be fully ready
-        console.log("Waiting for offscreen document to be ready...")
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Reduced wait time for faster audio start
+        console.log("Brief wait for offscreen document to be ready...")
+        await new Promise(resolve => setTimeout(resolve, 100))
 
         console.log("Sending PROCESS_STREAM message to offscreen document")
         await chrome.runtime.sendMessage({

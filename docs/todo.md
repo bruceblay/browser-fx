@@ -1,4 +1,2 @@
-- better design
-- faders look bad - colors etc.
-- reverb defaults should be better, state not saving
-- 
+- add three new effects to our about page
+- add tuna.js effects?  maybe not.  that library seems old and dusty.

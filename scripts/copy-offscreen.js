@@ -9,7 +9,18 @@ const sourceFiles = [
   'offscreen-effects.js'
 ]
 
-const buildDir = path.join(__dirname, '../build/chrome-mv3-dev')
+// Find the correct build directory (dev or prod)
+const buildBaseDir = path.join(__dirname, '../build')
+let buildDir
+
+if (fs.existsSync(path.join(buildBaseDir, 'chrome-mv3-prod'))) {
+  buildDir = path.join(buildBaseDir, 'chrome-mv3-prod')
+} else if (fs.existsSync(path.join(buildBaseDir, 'chrome-mv3-dev'))) {
+  buildDir = path.join(buildBaseDir, 'chrome-mv3-dev')
+} else {
+  console.error('❌ No build directory found!')
+  process.exit(1)
+}
 
 console.log('📦 Copying offscreen files to build directory...')
 

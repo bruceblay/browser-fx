@@ -115,14 +115,37 @@ function IndexPopup() {
 
   const handleStartCapture = () => {
     setIsCapturing(true)
+
+    // Set a timeout to handle message port issues
+    const timeoutId = setTimeout(() => {
+      console.warn("Start capture taking longer than expected, but continuing...")
+    }, 2000)
+
     chrome.runtime.sendMessage({
       type: "START_CAPTURE",
       effectId: selectedEffect,
       params: effectParams
     }, (response) => {
+      clearTimeout(timeoutId)
+
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError.message
+        console.error("Runtime error:", error)
+
+        // Only revert state for genuine errors, not timeouts
+        if (!error.includes("message port closed")) {
+          setIsCapturing(false)
+        } else {
+          console.log("Message port timeout, but capture may still be working")
+        }
+        return
+      }
+
       if (!response?.success) {
         console.error("Failed to start capture:", response?.error)
         setIsCapturing(false)
+      } else {
+        console.log("Capture started successfully")
       }
     })
   }
