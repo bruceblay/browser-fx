@@ -1,6 +1,8 @@
 // Multi-effect offscreen document for Browser FX
 
-console.log("🎵 Multi-effect offscreen document loaded")
+console.log("🎵 Multi-effect offscreen document loaded - TESTING IF THIS APPEARS!")
+console.log("🎵 OFFSCREEN DOCUMENT IS WORKING AND LOADED!")
+window.postMessage({ type: 'OFFSCREEN_LOADED' }, '*')
 
 let audioContext = null
 let sourceNode = null
@@ -377,38 +379,214 @@ function createPhaser(context, params) {
   return { input: inputGain, output: outputGain }
 }
 
-// AutoWah Effect Implementation - Simplified and Musical
-function createAutoWah(context, params) {
-  console.log('🎵 AUTOWAH: Creating simple envelope-following wah filter')
+// Tremolo Effect Implementation
+function createTremolo(context, params) {
+  console.log('🎵 TREMOLO: Creating tremolo effect')
 
-  // Initialize live params with simpler, more musical defaults
-  liveParams.sensitivity = params.sensitivity || 0.5  // 0-1 range, simpler
-  liveParams.baseFreq = params.baseFreq || 400        // 400Hz - good midrange start
-  liveParams.range = params.range || 2000             // Max frequency range
-  liveParams.wet = params.wet || 0.7
+  // Initialize live params
+  liveParams.rate = params.rate || 4.0    // 4Hz default
+  liveParams.depth = params.depth || 0.5  // 0-1 depth
+  liveParams.wet = params.wet || 1.0      // Full wet for tremolo
 
-  const filter = context.createBiquadFilter()
-  const analyser = context.createAnalyser()
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const amplitude = context.createGain()
   const wetGain = context.createGain()
   const dryGain = context.createGain()
   const inputGain = context.createGain()
   const outputGain = context.createGain()
 
-  // Set up filter - lowpass for classic wah sound
-  filter.type = 'lowpass'
-  filter.frequency.value = liveParams.baseFreq
-  filter.Q.value = 8  // Higher Q for classic wah resonance
-
-  // Set up analyser - simple and responsive
-  analyser.fftSize = 256
-  analyser.smoothingTimeConstant = 0.6
+  // Set up LFO
+  lfo.frequency.value = liveParams.rate
+  lfo.type = 'sine'
+  lfoGain.gain.value = liveParams.depth * 0.5  // Scale depth
+  amplitude.gain.value = 1 - liveParams.depth * 0.5  // DC offset
 
   // Set up wet/dry mix
   wetGain.gain.value = liveParams.wet
   dryGain.gain.value = 1 - liveParams.wet
 
+  // Connect LFO to amplitude modulation
+  lfo.connect(lfoGain)
+  lfoGain.connect(amplitude.gain)
+
   // Connect audio chain
-  inputGain.connect(analyser)
+  inputGain.connect(amplitude)
+  inputGain.connect(dryGain)
+  amplitude.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Start LFO
+  lfo.start()
+
+  // Store references
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
+  inputGain._amplitude = amplitude
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Ping Pong Delay Effect Implementation
+function createPingPongDelay(context, params) {
+  console.log('🎵 PINGPONG: Creating ping pong delay effect')
+
+  // Initialize live params
+  liveParams.delayTime = params.delayTime || 0.3   // 300ms default
+  liveParams.feedback = params.feedback || 0.4     // 40% feedback
+  liveParams.wet = params.wet || 0.4               // 40% wet
+
+  const delayL = context.createDelay(1)
+  const delayR = context.createDelay(1)
+  const feedbackL = context.createGain()
+  const feedbackR = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+  const merger = context.createChannelMerger(2)
+  const splitter = context.createChannelSplitter(2)
+
+  // Set up delays
+  delayL.delayTime.value = liveParams.delayTime
+  delayR.delayTime.value = liveParams.delayTime
+
+  // Set up feedback
+  feedbackL.gain.value = liveParams.feedback
+  feedbackR.gain.value = liveParams.feedback
+
+  // Set up wet/dry mix
+  wetGain.gain.value = liveParams.wet
+  dryGain.gain.value = 1 - liveParams.wet
+
+  // Connect ping pong delay chain
+  inputGain.connect(splitter)
+  splitter.connect(delayL, 0)  // Left input to left delay
+  splitter.connect(delayR, 1)  // Right input to right delay
+
+  // Cross feedback for ping pong effect
+  delayL.connect(feedbackR)
+  delayR.connect(feedbackL)
+  feedbackL.connect(delayL)
+  feedbackR.connect(delayR)
+
+  // Output
+  delayL.connect(merger, 0, 1)  // Left delay to right output
+  delayR.connect(merger, 0, 0)  // Right delay to left output
+  merger.connect(wetGain)
+
+  inputGain.connect(dryGain)
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references
+  inputGain._delayL = delayL
+  inputGain._delayR = delayR
+  inputGain._feedbackL = feedbackL
+  inputGain._feedbackR = feedbackR
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Vibrato Effect Implementation
+function createVibrato(context, params) {
+  console.log('🎵 VIBRATO: Creating vibrato effect')
+
+  // Initialize live params
+  liveParams.rate = params.rate || 5.0     // 5Hz default
+  liveParams.depth = params.depth || 0.02  // 2% pitch variation
+  liveParams.wet = params.wet || 1.0       // Full wet for vibrato
+
+  const delay = context.createDelay(0.1)
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up base delay time (small for vibrato)
+  delay.delayTime.value = 0.01  // 10ms base delay
+
+  // Set up LFO for vibrato
+  lfo.frequency.value = liveParams.rate
+  lfo.type = 'sine'
+  lfoGain.gain.value = liveParams.depth * 0.01  // Convert to seconds
+
+  // Set up wet/dry mix
+  wetGain.gain.value = liveParams.wet
+  dryGain.gain.value = 1 - liveParams.wet
+
+  // Connect LFO to delay time modulation
+  lfo.connect(lfoGain)
+  lfoGain.connect(delay.delayTime)
+
+  // Connect audio chain
+  inputGain.connect(delay)
+  inputGain.connect(dryGain)
+  delay.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Start LFO
+  lfo.start()
+
+  // Store references
+  inputGain._delay = delay
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Auto Filter Effect Implementation
+function createAutoFilter(context, params) {
+  console.log('🎵 AUTOFILTER: Creating auto filter effect')
+
+  // Initialize live params
+  liveParams.rate = params.rate || 2.0        // 2Hz sweep rate
+  liveParams.baseFreq = params.baseFreq || 200 // 200Hz base frequency
+  liveParams.octaves = params.octaves || 3     // 3 octave sweep range
+  liveParams.wet = params.wet || 0.8           // 80% wet
+
+  const filter = context.createBiquadFilter()
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up filter
+  filter.type = 'lowpass'
+  filter.frequency.value = liveParams.baseFreq
+  filter.Q.value = 2  // Moderate resonance
+
+  // Set up LFO for filter sweep
+  lfo.frequency.value = liveParams.rate
+  lfo.type = 'sine'
+  // Calculate sweep range based on octaves
+  const maxFreq = liveParams.baseFreq * Math.pow(2, liveParams.octaves)
+  lfoGain.gain.value = (maxFreq - liveParams.baseFreq) / 2
+
+  // Set up wet/dry mix
+  wetGain.gain.value = liveParams.wet
+  dryGain.gain.value = 1 - liveParams.wet
+
+  // Connect LFO to filter frequency modulation
+  lfo.connect(lfoGain)
+  lfoGain.connect(filter.frequency)
+
+  // Connect audio chain
   inputGain.connect(filter)
   inputGain.connect(dryGain)
   filter.connect(wetGain)
@@ -416,44 +594,13 @@ function createAutoWah(context, params) {
   wetGain.connect(outputGain)
   dryGain.connect(outputGain)
 
-  // Simple envelope following - much cleaner
-  let lastLevel = 0
-  const updateFilter = () => {
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    analyser.getByteTimeDomainData(dataArray)  // Use time domain for RMS
-
-    // Calculate RMS level (more musical than frequency domain)
-    let sum = 0
-    for (let i = 0; i < dataArray.length; i++) {
-      const sample = (dataArray[i] - 128) / 128
-      sum += sample * sample
-    }
-    const rms = Math.sqrt(sum / dataArray.length)
-
-    // Smooth the envelope with sensitivity control
-    const smoothing = 1 - liveParams.sensitivity * 0.5  // More sensitivity = less smoothing
-    lastLevel = lastLevel * smoothing + rms * (1 - smoothing)
-
-    // Map to frequency range linearly (more predictable)
-    const normalizedLevel = Math.min(lastLevel * liveParams.sensitivity * 10, 1)
-    const freq = liveParams.baseFreq + (normalizedLevel * liveParams.range)
-
-    filter.frequency.value = Math.min(Math.max(freq, 100), 8000)
-
-    requestAnimationFrame(updateFilter)
-  }
-  updateFilter()
-
-  console.log('🎵 AUTOWAH: Effect created with parameters:', {
-    sensitivity: liveParams.sensitivity,
-    baseFreq: liveParams.baseFreq + 'Hz',
-    range: liveParams.range + 'Hz',
-    wet: liveParams.wet
-  })
+  // Start LFO
+  lfo.start()
 
   // Store references
   inputGain._filter = filter
-  inputGain._analyser = analyser
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
   inputGain._wetGain = wetGain
   inputGain._dryGain = dryGain
 
@@ -464,33 +611,66 @@ function createAutoWah(context, params) {
 function createEffect(effectId, params) {
   const context = audioContext
   console.log(`🎵 Creating effect: ${effectId}`, params)
-  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, autowah`)
+  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, tremolo, pingpongdelay, vibrato, autofilter`)
 
+  let result
   switch (effectId) {
     case 'bitcrusher':
-      return createBitcrusher(context, params)
+      result = createBitcrusher(context, params)
+      console.log(`🎵 BITCRUSHER created:`, typeof result, result)
+      return result
 
     case 'reverb':
-      return createReverb(context, params)
+      result = createReverb(context, params)
+      console.log(`🎵 REVERB created:`, typeof result, result)
+      return result
 
     case 'distortion':
-      return createDistortion(context, params)
+      result = createDistortion(context, params)
+      console.log(`🎵 DISTORTION created:`, typeof result, result)
+      return result
 
     case 'chorus':
       console.log(`🎵 CREATING CHORUS EFFECT`)
-      return createChorus(context, params)
+      result = createChorus(context, params)
+      console.log(`🎵 CHORUS created:`, typeof result, result)
+      return result
 
     case 'phaser':
       console.log(`🎵 CREATING PHASER EFFECT`)
-      return createPhaser(context, params)
+      result = createPhaser(context, params)
+      console.log(`🎵 PHASER created:`, typeof result, result)
+      return result
 
-    case 'autowah':
-      console.log(`🎵 CREATING AUTOWAH EFFECT`)
-      return createAutoWah(context, params)
+    case 'tremolo':
+      console.log(`🎵 CREATING TREMOLO EFFECT`)
+      result = createTremolo(context, params)
+      console.log(`🎵 TREMOLO created:`, typeof result, result)
+      return result
+
+    case 'pingpongdelay':
+      console.log(`🎵 CREATING PINGPONG DELAY EFFECT`)
+      result = createPingPongDelay(context, params)
+      console.log(`🎵 PINGPONG DELAY created:`, typeof result, result)
+      return result
+
+    case 'vibrato':
+      console.log(`🎵 CREATING VIBRATO EFFECT`)
+      result = createVibrato(context, params)
+      console.log(`🎵 VIBRATO created:`, typeof result, result)
+      return result
+
+    case 'autofilter':
+      console.log(`🎵 CREATING AUTOFILTER EFFECT`)
+      result = createAutoFilter(context, params)
+      console.log(`🎵 AUTOFILTER created:`, typeof result, result)
+      return result
 
     default:
-      console.warn(`🎵 Unknown effect: ${effectId}`)
-      return createBitcrusher(context, params) // Fallback to bitcrusher
+      console.warn(`🎵 Unknown effect: ${effectId} - FALLING BACK TO BITCRUSHER!`)
+      result = createBitcrusher(context, params)
+      console.log(`🎵 DEFAULT (bitcrusher fallback) created:`, typeof result, result)
+      return result
   }
 }
 
@@ -529,20 +709,25 @@ function switchEffect(effectId, params) {
 
   // Reconnect audio chain if we have active audio
   if (sourceNode && destinationNode) {
+    console.log(`🎵 CONNECTING AUDIO: effect type=${typeof currentEffect}, has input=${!!currentEffect.input}, has output=${!!currentEffect.output}`)
     try {
       if (currentEffect.input && currentEffect.output) {
         // Complex effect with input/output nodes
+        console.log(`🎵 COMPLEX EFFECT CONNECTION: sourceNode -> ${currentEffect.input.constructor.name} -> ${currentEffect.output.constructor.name} -> destinationNode`)
         sourceNode.connect(currentEffect.input)
         currentEffect.output.connect(destinationNode)
       } else {
         // Simple effect (like bitcrusher ScriptProcessor)
+        console.log(`🎵 SIMPLE EFFECT CONNECTION: sourceNode -> ${currentEffect.constructor.name} -> destinationNode`)
         sourceNode.connect(currentEffect)
         currentEffect.connect(destinationNode)
       }
-      console.log(`🎵 Audio chain reconnected with ${effectId}`)
+      console.log(`🎵 Audio chain reconnected successfully with ${effectId}`)
     } catch (error) {
-      console.error("🎵 Error reconnecting audio chain:", error)
+      console.error("🎵 ERROR reconnecting audio chain:", error)
     }
+  } else {
+    console.warn(`🎵 No audio to connect: sourceNode=${!!sourceNode}, destinationNode=${!!destinationNode}`)
   }
 }
 
@@ -639,13 +824,71 @@ function updateEffectParams(effectId, params) {
       }
       break
 
-    case 'autowah':
+    case 'tremolo':
       // Update wet/dry mix in real-time
       if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
         currentEffect.input._wetGain.gain.value = liveParams.wet
         currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
       }
-      // Other parameters (sensitivity, baseFreq, range) are handled via liveParams automatically in the animation loop
+      // Update LFO parameters in real-time
+      if (params.rate !== undefined && currentEffect.input._lfo) {
+        currentEffect.input._lfo.frequency.value = liveParams.rate
+      }
+      if (params.depth !== undefined && currentEffect.input._lfoGain) {
+        currentEffect.input._lfoGain.gain.value = liveParams.depth * 0.5
+        currentEffect.input._amplitude.gain.value = 1 - liveParams.depth * 0.5
+      }
+      break
+
+    case 'pingpongdelay':
+      // Update wet/dry mix in real-time
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      // Update delay time in real-time
+      if (params.delayTime !== undefined && currentEffect.input._delayL && currentEffect.input._delayR) {
+        currentEffect.input._delayL.delayTime.value = liveParams.delayTime
+        currentEffect.input._delayR.delayTime.value = liveParams.delayTime
+      }
+      // Update feedback in real-time
+      if (params.feedback !== undefined && currentEffect.input._feedbackL && currentEffect.input._feedbackR) {
+        currentEffect.input._feedbackL.gain.value = liveParams.feedback
+        currentEffect.input._feedbackR.gain.value = liveParams.feedback
+      }
+      break
+
+    case 'vibrato':
+      // Update wet/dry mix in real-time
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      // Update LFO parameters in real-time
+      if (params.rate !== undefined && currentEffect.input._lfo) {
+        currentEffect.input._lfo.frequency.value = liveParams.rate
+      }
+      if (params.depth !== undefined && currentEffect.input._lfoGain) {
+        currentEffect.input._lfoGain.gain.value = liveParams.depth * 0.01
+      }
+      break
+
+    case 'autofilter':
+      // Update wet/dry mix in real-time
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      // Update LFO rate in real-time
+      if (params.rate !== undefined && currentEffect.input._lfo) {
+        currentEffect.input._lfo.frequency.value = liveParams.rate
+      }
+      // Update filter parameters (requires recalculating LFO gain)
+      if ((params.baseFreq !== undefined || params.octaves !== undefined) && currentEffect.input._lfoGain) {
+        const maxFreq = liveParams.baseFreq * Math.pow(2, liveParams.octaves)
+        currentEffect.input._lfoGain.gain.value = (maxFreq - liveParams.baseFreq) / 2
+        currentEffect.input._filter.frequency.value = liveParams.baseFreq
+      }
       break
 
     default:
@@ -676,12 +919,8 @@ async function processAudioStream(streamId) {
     sourceNode = new MediaStreamAudioSourceNode(ctx, { mediaStream: stream })
     destinationNode = new MediaStreamAudioDestinationNode(ctx)
 
-    // Create initial effect (bitcrusher by default with aggressive settings)
-    const initialParams = currentEffectParams.bits ? currentEffectParams : {
-      bits: 4,
-      normalRange: 0.4,
-      wet: 1.0
-    }
+    // Create initial effect with the parameters from the message
+    const initialParams = currentEffectParams
     console.log("🎵 Initializing with params:", currentEffectId, initialParams)
     switchEffect(currentEffectId, initialParams)
 
@@ -737,9 +976,17 @@ function cleanup() {
 // Listen for messages
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   console.log("🎵 MULTI-EFFECT OFFSCREEN received message:", message.type, message)
+  console.log("🎵 MESSAGE RECEIVED - OFFSCREEN IS WORKING!")
 
   if (message.type === "PROCESS_STREAM") {
     try {
+      console.log(`🎵 PROCESS_STREAM: effectId=${message.effectId}, params=`, message.params)
+
+      // Set the current effect from the message
+      currentEffectId = message.effectId || 'bitcrusher'
+      currentEffectParams = message.params || {}
+      console.log(`🎵 AFTER SETTING: currentEffectId=${currentEffectId}, currentEffectParams=`, currentEffectParams)
+
       await processAudioStream(message.streamId)
       sendResponse({ success: true, message: "Stream processing started" })
     } catch (error) {
