@@ -69,14 +69,20 @@ function IndexPopup() {
     saveState()
   }, [currentTabId, selectedEffect, effectParams, isCapturing])
 
-  // Remove body margin
+  // Remove body margin and set gradient background
   useEffect(() => {
     document.body.style.margin = '0'
     document.body.style.padding = '0'
+    document.body.style.background = 'linear-gradient(135deg, #374151 0%, #111827 100%)'
+    document.body.style.minHeight = '100vh'
+    document.documentElement.style.minHeight = '100vh'
 
     return () => {
       document.body.style.margin = ''
       document.body.style.padding = ''
+      document.body.style.background = ''
+      document.body.style.minHeight = ''
+      document.documentElement.style.minHeight = ''
     }
   }, [])
 
@@ -137,7 +143,7 @@ function IndexPopup() {
 
   if (showAbout) {
     return (
-      <div style={{ width: 380, height: 600, padding: 0, background: 'linear-gradient(135deg, #374151 0%, #111827 100%)' }}>
+      <div style={{ width: 380, minHeight: 600, padding: 0, background: 'transparent' }}>
         <AboutView onBack={() => setShowAbout(false)} />
       </div>
     )
@@ -146,15 +152,21 @@ function IndexPopup() {
   return (
     <div style={{
       width: 380,
-      height: 440,
+      minHeight: 440,
       padding: 0,
-      background: 'linear-gradient(135deg, #374151 0%, #111827 100%)',
+      background: 'transparent',
       fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       color: '#fff',
       display: 'flex',
       flexDirection: 'column'
     }}>
-      <div style={{ padding: '14px 18px' }}>
+      <div style={{
+        padding: '14px 18px',
+        minHeight: '440px',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         <Header onInfoClick={() => setShowAbout(true)} />
 
         <div style={{ marginTop: 8 }}>

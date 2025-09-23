@@ -801,65 +801,6 @@ function switchEffect(effectId, params) {
   }
 }
 
-// Switch to a new effect for specific tab
-function switchEffectForTab(effectId, params, tabId) {
-  console.log(`🎵 Switching to effect for tab ${tabId}: ${effectId}`, params)
-
-  // Ensure we have the audioContext
-  if (!audioContext) {
-    console.error("🎵 No audioContext available for effect switching")
-    return
-  }
-
-  const state = getTabState(tabId)
-
-  // Disconnect current effect if exists
-  if (state.currentEffect) {
-    try {
-      if (state.sourceNode) {
-        state.sourceNode.disconnect()
-      }
-
-      // Handle different effect node structures
-      if (state.currentEffect.disconnect) {
-        state.currentEffect.disconnect()
-      } else if (state.currentEffect.input && state.currentEffect.output) {
-        state.currentEffect.output.disconnect()
-      }
-    } catch (error) {
-      console.warn(`🎵 Error disconnecting current effect for tab ${tabId}:`, error)
-    }
-  }
-
-  // Create new effect for this tab
-  state.currentEffect = createEffect(effectId, params, state.liveParams)
-  state.currentEffectId = effectId
-  state.currentEffectParams = params
-
-  // Reconnect audio chain if we have active audio
-  if (state.sourceNode && state.destinationNode) {
-    console.log(`🎵 CONNECTING AUDIO for tab ${tabId}: effect type=${typeof state.currentEffect}, has input=${!!state.currentEffect.input}, has output=${!!state.currentEffect.output}`)
-    try {
-      if (state.currentEffect.input && state.currentEffect.output) {
-        // Complex effect with input/output nodes
-        console.log(`🎵 COMPLEX EFFECT CONNECTION for tab ${tabId}: sourceNode -> ${state.currentEffect.input.constructor.name} -> ${state.currentEffect.output.constructor.name} -> destinationNode`)
-        state.sourceNode.connect(state.currentEffect.input)
-        state.currentEffect.output.connect(state.destinationNode)
-      } else {
-        // Simple effect (like bitcrusher ScriptProcessor)
-        console.log(`🎵 SIMPLE EFFECT CONNECTION for tab ${tabId}: sourceNode -> ${state.currentEffect.constructor.name} -> destinationNode`)
-        state.sourceNode.connect(state.currentEffect)
-        state.currentEffect.connect(state.destinationNode)
-      }
-      console.log(`🎵 Audio chain reconnected successfully for tab ${tabId} with ${effectId}`)
-    } catch (error) {
-      console.error(`🎵 ERROR reconnecting audio chain for tab ${tabId}:`, error)
-    }
-  } else {
-    console.warn(`🎵 No audio to connect for tab ${tabId}: sourceNode=${!!state.sourceNode}, destinationNode=${!!state.destinationNode}`)
-  }
-}
-
 // Update parameters of current effect in real-time
 function updateEffectParams(effectId, params) {
   console.log(`🎵 Updating effect params for ${effectId}:`, params)
@@ -1025,60 +966,12 @@ function updateEffectParams(effectId, params) {
   }
 }
 
-// Update parameters for specific tab
-function updateEffectParamsForTab(effectId, params, tabId) {
-  console.log(`🎵 Updating effect params for tab ${tabId}, effect ${effectId}:`, params)
-
-  const state = getTabState(tabId)
-
-  if (effectId !== state.currentEffectId) {
-    console.warn(`🎵 Param update for inactive effect ${effectId} on tab ${tabId} (current: ${state.currentEffectId})`)
-    return
-  }
-
-  // Update live parameters for this tab
-  Object.assign(state.liveParams, params)
-  Object.assign(state.currentEffectParams, params)
-
-  // Apply real-time updates based on effect type
-  if (!state.currentEffect) return
-
-  // Note: For simplicity, I'm only implementing the most commonly changed parameters
-  // The bitcrusher parameters will update automatically via the tab's liveParams reference
-  switch (state.currentEffectId) {
-    case 'bitcrusher':
-      // Bitcrusher parameters are updated automatically via liveParams in the audio callback
-      break
-
-    case 'reverb':
-      // Update wet/dry mix in real-time
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
-      }
-      // Note: roomSize and decay require effect recreation
-      if (params.roomSize !== undefined || params.decay !== undefined) {
-        console.log(`🎵 Recreating reverb for tab ${tabId} for roomSize/decay change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
-      }
-      break
-
-    default:
-      console.warn(`🎵 Real-time parameter update not implemented for effect: ${state.currentEffectId}`)
-      // For other effects that don't have real-time updates implemented,
-      // recreate the effect with new parameters
-      console.log(`🎵 Recreating ${effectId} for tab ${tabId} with new parameters`)
-      switchEffectForTab(effectId, state.currentEffectParams, tabId)
-  }
-}
-
-// Process audio stream for specific tab
-async function processAudioStreamForTab(streamId, tabId) {
-  console.log(`🎵 Processing audio stream for tab ${tabId} with ID:`, streamId)
+// Process audio stream
+async function processAudioStream(streamId) {
+  console.log("🎵 Processing audio stream with ID:", streamId)
 
   try {
     const ctx = initializeAudioContext()
-    const state = getTabState(tabId)
 
     // Get the MediaStream using the stream ID
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -1090,30 +983,30 @@ async function processAudioStreamForTab(streamId, tabId) {
       }
     })
 
-    console.log(`🎵 MediaStream obtained for tab ${tabId}:`, stream)
+    console.log("🎵 MediaStream obtained from ID:", stream)
 
-    // Create audio graph for this tab
-    state.sourceNode = new MediaStreamAudioSourceNode(ctx, { mediaStream: stream })
-    state.destinationNode = new MediaStreamAudioDestinationNode(ctx)
+    // Create audio graph
+    sourceNode = new MediaStreamAudioSourceNode(ctx, { mediaStream: stream })
+    destinationNode = new MediaStreamAudioDestinationNode(ctx)
 
     // Create initial effect with the parameters from the message
-    const initialParams = state.currentEffectParams
-    console.log(`🎵 Initializing tab ${tabId} with params:`, state.currentEffectId, initialParams)
-    switchEffectForTab(state.currentEffectId, initialParams, tabId)
+    const initialParams = currentEffectParams
+    console.log("🎵 Initializing with params:", currentEffectId, initialParams)
+    switchEffect(currentEffectId, initialParams)
 
-    console.log(`🎵 Audio graph connected for tab ${tabId} with ${state.currentEffectId} effect`)
+    console.log(`🎵 Audio graph connected with ${currentEffectId} effect`)
 
     // Play the processed stream
-    state.audioElement = new Audio()
-    state.audioElement.srcObject = state.destinationNode.stream
-    state.audioElement.autoplay = true
+    audioElement = new Audio()
+    audioElement.srcObject = destinationNode.stream
+    audioElement.autoplay = true
 
-    state.currentStream = stream
+    currentStream = stream
 
-    console.log(`🎵 Audio processing setup complete for tab ${tabId} with ${state.currentEffectId}!`)
+    console.log(`🎵 Audio processing setup complete with ${currentEffectId}!`)
 
   } catch (error) {
-    console.error(`🎵 Error setting up audio processing for tab ${tabId}:`, error)
+    console.error("🎵 Error setting up audio processing:", error)
   }
 }
 
@@ -1157,18 +1050,14 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
   if (message.type === "PROCESS_STREAM") {
     try {
-      console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, effectId=${message.effectId}, params=`, message.params)
+      console.log(`🎵 PROCESS_STREAM: effectId=${message.effectId}, params=`, message.params)
 
-      // Get tab state
-      const tabId = message.tabId
-      const state = getTabState(tabId)
+      // Set the current effect from the message
+      currentEffectId = message.effectId || 'bitcrusher'
+      currentEffectParams = message.params || {}
+      console.log(`🎵 AFTER SETTING: currentEffectId=${currentEffectId}, currentEffectParams=`, currentEffectParams)
 
-      // Set the effect for this tab
-      state.currentEffectId = message.effectId || 'bitcrusher'
-      state.currentEffectParams = message.params || {}
-      console.log(`🎵 AFTER SETTING for tab ${tabId}: currentEffectId=${state.currentEffectId}, currentEffectParams=`, state.currentEffectParams)
-
-      await processAudioStreamForTab(message.streamId, tabId)
+      await processAudioStream(message.streamId)
       sendResponse({ success: true, message: "Stream processing started" })
     } catch (error) {
       console.error("🎵 Error processing stream:", error)
@@ -1182,44 +1071,22 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   }
 
   if (message.type === "STOP_STREAM") {
-    const tabId = message.tabId
-    if (tabId) {
-      cleanupTabState(tabId)
-      console.log(`🎵 Stream stopped for tab ${tabId}`)
-    } else {
-      console.warn("🎵 STOP_STREAM received without tabId")
-    }
+    cleanup()
     sendResponse({ success: true, message: "Stream stopped" })
   }
 
   if (message.type === "CLEAR_ALL_STREAMS") {
-    // Clear all tab states
-    for (const tabId of tabAudioState.keys()) {
-      cleanupTabState(tabId)
-    }
-    console.log("🎵 All streams cleared")
+    cleanup()
     sendResponse({ success: true, message: "All streams cleared" })
   }
 
   if (message.type === "UPDATE_EFFECT_PARAMS") {
-    const tabId = message.tabId
-    if (tabId) {
-      updateEffectParamsForTab(message.effectId, message.params, tabId)
-      console.log(`🎵 Parameters updated for tab ${tabId}`)
-    } else {
-      console.warn("🎵 UPDATE_EFFECT_PARAMS received without tabId")
-    }
+    updateEffectParams(message.effectId, message.params)
     sendResponse({ success: true, message: "Parameters updated" })
   }
 
   if (message.type === "SWITCH_EFFECT") {
-    const tabId = message.tabId
-    if (tabId) {
-      switchEffectForTab(message.effectId, message.params, tabId)
-      console.log(`🎵 Switched to ${message.effectId} for tab ${tabId}`)
-    } else {
-      console.warn("🎵 SWITCH_EFFECT received without tabId")
-    }
+    switchEffect(message.effectId, message.params)
     sendResponse({ success: true, message: `Switched to ${message.effectId}` })
   }
 

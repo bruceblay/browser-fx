@@ -93,10 +93,14 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "STOP_CAPTURE") {
     console.log("Processing STOP_CAPTURE request")
 
+    // Get the active tab ID
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
     // Forward stop message to offscreen document
     console.log("Sending STOP_STREAM to offscreen document")
     chrome.runtime.sendMessage({
-      type: "STOP_STREAM"
+      type: "STOP_STREAM",
+      tabId: activeTab?.id
     }).catch(error => {
       console.error("Failed to send STOP_STREAM:", error)
     })
@@ -108,12 +112,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "UPDATE_EFFECT_PARAMS") {
     console.log("Processing UPDATE_EFFECT_PARAMS request:", message.effectId, message.params)
 
+    // Get the active tab ID
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
     // Forward parameter updates to offscreen document
     console.log("Sending UPDATE_EFFECT_PARAMS to offscreen document")
     chrome.runtime.sendMessage({
       type: "UPDATE_EFFECT_PARAMS",
       effectId: message.effectId,
-      params: message.params
+      params: message.params,
+      tabId: activeTab?.id
     }).catch(error => {
       console.error("Failed to send UPDATE_EFFECT_PARAMS:", error)
     })
@@ -137,12 +145,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "SWITCH_EFFECT") {
     console.log("Processing SWITCH_EFFECT request:", message.effectId, message.params)
 
+    // Get the active tab ID
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
     // Forward switch effect message to offscreen document
     console.log("Sending SWITCH_EFFECT to offscreen document")
     chrome.runtime.sendMessage({
       type: "SWITCH_EFFECT",
       effectId: message.effectId,
-      params: message.params
+      params: message.params,
+      tabId: activeTab?.id
     }).catch(error => {
       console.error("Failed to send SWITCH_EFFECT:", error)
     })

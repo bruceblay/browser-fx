@@ -46,6 +46,6 @@ export const chorusConfig: EffectConfig = {
     rate: 1.0,
     depth: 0.07,
     delay: 5,
-    wet: 0.7
+    wet: 0.9
   }
 }

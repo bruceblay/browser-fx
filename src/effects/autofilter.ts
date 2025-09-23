@@ -52,10 +52,10 @@ export const autoFilterConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    rate: 1.0,
+    rate: 5.0,
     depth: 0.8,
-    baseFreq: 200,
-    octaves: 3.0,
+    baseFreq: 990,
+    octaves: 1.0,
     wet: 1.0
   }
 }
