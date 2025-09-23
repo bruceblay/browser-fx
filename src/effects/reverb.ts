@@ -36,6 +36,6 @@ export const reverbConfig: EffectConfig = {
   defaultValues: {
     roomSize: 0.7,
     decay: 2.0,
-    wet: 0.3
+    wet: 0.5
   }
 }

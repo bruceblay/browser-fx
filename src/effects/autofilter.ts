@@ -6,7 +6,7 @@ export const autoFilterConfig: EffectConfig = {
   description: 'LFO-controlled filter with automatic cutoff frequency modulation',
   parameters: [
     {
-      key: 'frequency',
+      key: 'rate',
       label: 'Rate',
       min: 0.1,
       max: 10,
@@ -52,7 +52,7 @@ export const autoFilterConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    frequency: 1.0,
+    rate: 1.0,
     depth: 0.8,
     baseFreq: 200,
     octaves: 3.0,

@@ -43,8 +43,8 @@ export const chorusConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    rate: 2.0,
-    depth: 0.6,
+    rate: 1.0,
+    depth: 0.07,
     delay: 5,
     wet: 0.7
   }

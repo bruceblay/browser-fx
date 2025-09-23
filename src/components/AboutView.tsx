@@ -86,9 +86,10 @@ export function AboutView({ onBack }: AboutViewProps) {
 
         <div style={{
           background: 'rgba(255,255,255,0.1)',
-          padding: 16,
+          padding: 8,
           borderRadius: 8,
           marginBottom: 16,
+          marginTop: 16,
           border: '1px solid rgba(255,255,255,0.2)'
         }}>
           <strong>Credits:</strong> Most effects are inspired by and based on implementations from{" "}
@@ -101,16 +102,6 @@ export function AboutView({ onBack }: AboutViewProps) {
             Tone.js
           </a>
           , an excellent Web Audio framework by Yotam Mann. Thank you to the Tone.js team for their incredible work on Web Audio abstractions and effect implementations.
-        </div>
-
-        <div style={{
-          background: 'rgba(255,255,255,0.1)',
-          padding: 16,
-          borderRadius: 8,
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <strong>Technical Note:</strong> All effects are processed in real-time using the Web Audio API.
-          Audio processing happens locally in your browser - no data is sent to external servers.
         </div>
       </div>
     </div>

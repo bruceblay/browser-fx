@@ -6,7 +6,7 @@ export const vibratoConfig: EffectConfig = {
   description: 'Pitch modulation effect using delay-based frequency modulation',
   parameters: [
     {
-      key: 'frequency',
+      key: 'rate',
       label: 'Rate',
       min: 0.1,
       max: 20,
@@ -43,8 +43,8 @@ export const vibratoConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    frequency: 5.0,
-    depth: 0.3,
+    rate: 1.2,
+    depth: 0.4,
     type: 0,
     wet: 1.0
   }

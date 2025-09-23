@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import "./fonts.css"
 import { Header } from "./components/Header"
 import { EffectSelector } from "./components/EffectSelector"
 import { EffectControls } from "./components/EffectControls"
@@ -136,7 +137,7 @@ function IndexPopup() {
 
   if (showAbout) {
     return (
-      <div style={{ width: 380, height: 600, padding: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div style={{ width: 380, height: 600, padding: 0, background: 'linear-gradient(135deg, #374151 0%, #111827 100%)' }}>
         <AboutView onBack={() => setShowAbout(false)} />
       </div>
     )
@@ -145,10 +146,10 @@ function IndexPopup() {
   return (
     <div style={{
       width: 380,
-      height: 600,
+      height: 440,
       padding: 0,
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      background: 'linear-gradient(135deg, #374151 0%, #111827 100%)',
+      fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       color: '#fff',
       display: 'flex',
       flexDirection: 'column'

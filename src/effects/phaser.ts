@@ -44,8 +44,8 @@ export const phaserConfig: EffectConfig = {
   ],
   defaultValues: {
     rate: 1.0,
-    depth: 0.7,
-    feedback: 0.3,
-    wet: 0.5
+    depth: 0.4,
+    feedback: 0.7,
+    wet: 1.0
   }
 }

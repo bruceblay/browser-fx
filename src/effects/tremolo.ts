@@ -44,8 +44,8 @@ export const tremoloConfig: EffectConfig = {
   ],
   defaultValues: {
     rate: 6.0,
-    depth: 0.7,
+    depth: 0.9,
     spread: 40,
-    wet: 0.8
+    wet: 0.9
   }
 }

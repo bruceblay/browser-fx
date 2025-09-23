@@ -43,9 +43,9 @@ export const pingPongDelayConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    delayTime: 0.25,
-    feedback: 0.3,
+    delayTime: 0.2,
+    feedback: 0.5,
     stereoSpread: 1.0,
-    wet: 0.4
+    wet: 0.7
   }
 }
