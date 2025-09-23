@@ -619,14 +619,14 @@ function createVibrato(context, params) {
 }
 
 // Auto Filter Effect Implementation
-function createAutoFilter(context, params) {
+function createAutoFilter(context, params, tabLiveParams) {
   console.log('🎵 AUTOFILTER: Creating auto filter effect')
 
   // Initialize live params
-  liveParams.rate = params.rate || 2.0        // 2Hz sweep rate
-  liveParams.baseFreq = params.baseFreq || 200 // 200Hz base frequency
-  liveParams.octaves = params.octaves || 3     // 3 octave sweep range
-  liveParams.wet = params.wet || 0.8           // 80% wet
+  tabLiveParams.rate = params.rate || 2.0        // 2Hz sweep rate
+  tabLiveParams.baseFreq = params.baseFreq || 200 // 200Hz base frequency
+  tabLiveParams.octaves = params.octaves || 3     // 3 octave sweep range
+  tabLiveParams.wet = params.wet || 0.8           // 80% wet
 
   const filter = context.createBiquadFilter()
   const lfo = context.createOscillator()
@@ -638,19 +638,19 @@ function createAutoFilter(context, params) {
 
   // Set up filter
   filter.type = 'lowpass'
-  filter.frequency.value = liveParams.baseFreq
+  filter.frequency.value = tabLiveParams.baseFreq
   filter.Q.value = 2  // Moderate resonance
 
   // Set up LFO for filter sweep
-  lfo.frequency.value = liveParams.rate
+  lfo.frequency.value = tabLiveParams.rate
   lfo.type = 'sine'
   // Calculate sweep range based on octaves
-  const maxFreq = liveParams.baseFreq * Math.pow(2, liveParams.octaves)
-  lfoGain.gain.value = (maxFreq - liveParams.baseFreq) / 2
+  const maxFreq = tabLiveParams.baseFreq * Math.pow(2, tabLiveParams.octaves)
+  lfoGain.gain.value = (maxFreq - tabLiveParams.baseFreq) / 2
 
   // Set up wet/dry mix
-  wetGain.gain.value = liveParams.wet
-  dryGain.gain.value = 1 - liveParams.wet
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
 
   // Connect LFO to filter frequency modulation
   lfo.connect(lfoGain)
@@ -671,6 +671,213 @@ function createAutoFilter(context, params) {
   inputGain._filter = filter
   inputGain._lfo = lfo
   inputGain._lfoGain = lfoGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Pitch Shifter Effect Implementation
+function createPitchShifter(context, params, tabLiveParams) {
+  console.log('🎵 PITCHSHIFTER: Creating pitch shifter effect')
+
+  // Initialize live params
+  tabLiveParams.pitch = params.pitch || 0        // 0 semitones (no shift)
+  tabLiveParams.windowSize = params.windowSize || 0.05  // 50ms window
+  tabLiveParams.overlap = params.overlap || 0.5   // 50% overlap
+  tabLiveParams.wet = params.wet || 1.0           // 100% wet
+
+  // Create a simple pitch shifter using delay and pitch modulation
+  const delay1 = context.createDelay(0.5)
+  const delay2 = context.createDelay(0.5)
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+  const mixer = context.createGain()
+
+  // Convert semitones to frequency ratio
+  const pitchRatio = Math.pow(2, tabLiveParams.pitch / 12)
+
+  // Set up delays for pitch shifting
+  const baseDelay = tabLiveParams.windowSize
+  delay1.delayTime.value = baseDelay
+  delay2.delayTime.value = baseDelay
+
+  // Set up LFO for pitch modulation
+  lfo.frequency.value = 1 / (tabLiveParams.windowSize * 2) // Modulation rate based on window
+  lfo.type = 'triangle'
+
+  // Modulate delay times to create pitch shifting effect
+  lfoGain.gain.value = baseDelay * (1 - 1/pitchRatio) * 0.5
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect pitch shifter chain
+  lfo.connect(lfoGain)
+  lfoGain.connect(delay1.delayTime)
+  // Inverted modulation for second delay
+  const inverter = context.createGain()
+  inverter.gain.value = -1
+  lfoGain.connect(inverter)
+  inverter.connect(delay2.delayTime)
+
+  inputGain.connect(delay1)
+  inputGain.connect(delay2)
+  inputGain.connect(dryGain)
+
+  delay1.connect(mixer)
+  delay2.connect(mixer)
+  mixer.gain.value = 0.5 // Mix the two delayed signals
+  mixer.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Start LFO
+  lfo.start()
+
+  // Store references
+  inputGain._delay1 = delay1
+  inputGain._delay2 = delay2
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Auto Panner Effect Implementation
+function createAutoPanner(context, params, tabLiveParams) {
+  console.log('🎵 AUTOPANNER: Creating auto panner effect')
+
+  // Initialize live params
+  tabLiveParams.rate = params.rate || 1.0      // 1Hz panning
+  tabLiveParams.depth = params.depth || 0.8    // 80% depth
+  tabLiveParams.type = params.type || 0        // Sine wave
+  tabLiveParams.wet = params.wet || 1.0        // 100% wet
+
+  const panner = context.createStereoPanner ? context.createStereoPanner() : context.createPanner()
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up LFO for panning
+  lfo.frequency.value = tabLiveParams.rate
+  const waveforms = ['sine', 'square', 'sawtooth', 'triangle']
+  lfo.type = waveforms[Math.floor(tabLiveParams.type) % waveforms.length]
+
+  // Set up LFO depth
+  lfoGain.gain.value = tabLiveParams.depth
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect panning chain
+  lfo.connect(lfoGain)
+
+  if (panner.pan) {
+    // StereoPanner (newer API)
+    lfoGain.connect(panner.pan)
+  } else {
+    // PannerNode fallback
+    panner.panningModel = 'equalpower'
+    panner.setPosition(0, 0, -1)
+    // Note: PannerNode doesn't work as well for this, but it's a fallback
+  }
+
+  inputGain.connect(panner)
+  inputGain.connect(dryGain)
+  panner.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Start LFO
+  lfo.start()
+
+  // Store references
+  inputGain._panner = panner
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Hall Reverb Effect Implementation
+function createHallReverb(context, params, tabLiveParams) {
+  console.log('🎵 HALLREVERB: Creating hall reverb effect')
+
+  // Initialize live params
+  tabLiveParams.roomSize = params.roomSize || 0.8
+  tabLiveParams.decay = params.decay || 4.0
+  tabLiveParams.preDelay = params.preDelay || 0.03
+  tabLiveParams.damping = params.damping || 6000
+  tabLiveParams.wet = params.wet || 0.4
+
+  // Create convolver for hall reverb
+  const convolver = context.createConvolver()
+  const preDelayNode = context.createDelay(1)
+  const dampingFilter = context.createBiquadFilter()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up pre-delay
+  preDelayNode.delayTime.value = tabLiveParams.preDelay
+
+  // Set up damping filter
+  dampingFilter.type = 'lowpass'
+  dampingFilter.frequency.value = tabLiveParams.damping
+  dampingFilter.Q.value = 1
+
+  // Create hall impulse response
+  const length = context.sampleRate * tabLiveParams.decay
+  const impulse = context.createBuffer(2, length, context.sampleRate)
+
+  for (let channel = 0; channel < 2; channel++) {
+    const channelData = impulse.getChannelData(channel)
+    for (let i = 0; i < length; i++) {
+      const n = length - i
+      // Create hall-like reverb with early reflections
+      const earlyReflection = Math.random() * 0.3 * Math.pow(n / length, 0.5)
+      const lateReverb = (Math.random() * 2 - 1) * Math.pow(n / length, tabLiveParams.roomSize)
+      channelData[i] = (earlyReflection + lateReverb * 0.7) * 0.5
+    }
+  }
+
+  convolver.buffer = impulse
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect hall reverb chain
+  inputGain.connect(preDelayNode)
+  inputGain.connect(dryGain)
+  preDelayNode.connect(convolver)
+  convolver.connect(dampingFilter)
+  dampingFilter.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for cleanup and real-time updates
+  inputGain._convolver = convolver
+  inputGain._preDelayNode = preDelayNode
+  inputGain._dampingFilter = dampingFilter
   inputGain._wetGain = wetGain
   inputGain._dryGain = dryGain
 
@@ -732,13 +939,31 @@ function createEffect(effectId, params, tabLiveParams) {
 
     case 'autofilter':
       console.log(`🎵 CREATING AUTOFILTER EFFECT`)
-      result = createAutoFilter(context, params)
+      result = createAutoFilter(context, params, tabLiveParams)
       console.log(`🎵 AUTOFILTER created:`, typeof result, result)
+      return result
+
+    case 'pitchshifter':
+      console.log(`🎵 CREATING PITCH SHIFTER EFFECT`)
+      result = createPitchShifter(context, params, tabLiveParams)
+      console.log(`🎵 PITCH SHIFTER created:`, typeof result, result)
+      return result
+
+    case 'autopanner':
+      console.log(`🎵 CREATING AUTO PANNER EFFECT`)
+      result = createAutoPanner(context, params, tabLiveParams)
+      console.log(`🎵 AUTO PANNER created:`, typeof result, result)
+      return result
+
+    case 'hallreverb':
+      console.log(`🎵 CREATING HALL REVERB EFFECT`)
+      result = createHallReverb(context, params, tabLiveParams)
+      console.log(`🎵 HALL REVERB created:`, typeof result, result)
       return result
 
     default:
       console.warn(`🎵 Unknown effect: ${effectId} - FALLING BACK TO BITCRUSHER!`)
-      result = createBitcrusher(context, params)
+      result = createBitcrusher(context, params, tabLiveParams)
       console.log(`🎵 DEFAULT (bitcrusher fallback) created:`, typeof result, result)
       return result
   }

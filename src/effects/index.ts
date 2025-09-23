@@ -8,18 +8,24 @@ import { tremoloConfig } from './tremolo'
 import { pingPongDelayConfig } from './pingpongdelay'
 import { vibratoConfig } from './vibrato'
 import { autoFilterConfig } from './autofilter'
+import { pitchShifterConfig } from './pitchshifter'
+import { autoPannerConfig } from './autopanner'
+import { hallReverbConfig } from './hallreverb'
 
-// Registry of all available effects (NOTE: NOT using autoWah - using tremolo, pingpongdelay, vibrato, autofilter)
+// Registry of all available effects
 export const EFFECTS: Record<string, EffectConfig> = {
   [bitcrusherConfig.id]: bitcrusherConfig,
   [reverbConfig.id]: reverbConfig,
+  [hallReverbConfig.id]: hallReverbConfig,
   [distortionConfig.id]: distortionConfig,
   [chorusConfig.id]: chorusConfig,
   [phaserConfig.id]: phaserConfig,
   [tremoloConfig.id]: tremoloConfig,
+  [autoPannerConfig.id]: autoPannerConfig,
   [pingPongDelayConfig.id]: pingPongDelayConfig,
   [vibratoConfig.id]: vibratoConfig,
   [autoFilterConfig.id]: autoFilterConfig,
+  [pitchShifterConfig.id]: pitchShifterConfig,
 }
 
 // Get list of effects for dropdown
@@ -43,4 +49,17 @@ export const getEffectDefaults = (effectId: string): Record<string, number> => {
 
 // Export all types and configs
 export * from './types'
-export { bitcrusherConfig, reverbConfig, distortionConfig, chorusConfig, phaserConfig, tremoloConfig, pingPongDelayConfig, vibratoConfig, autoFilterConfig }
+export {
+  bitcrusherConfig,
+  reverbConfig,
+  hallReverbConfig,
+  distortionConfig,
+  chorusConfig,
+  phaserConfig,
+  tremoloConfig,
+  autoPannerConfig,
+  pingPongDelayConfig,
+  vibratoConfig,
+  autoFilterConfig,
+  pitchShifterConfig
+}
