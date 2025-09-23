@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Header } from "./components/Header"
 import { EffectSelector } from "./components/EffectSelector"
 import { EffectControls } from "./components/EffectControls"
@@ -13,8 +13,60 @@ function IndexPopup() {
     getEffectDefaults("bitcrusher")
   )
   const [showAbout, setShowAbout] = useState(false)
+  const [currentTabId, setCurrentTabId] = useState<number | null>(null)
 
   const currentEffectConfig = getEffectConfig(selectedEffect)
+
+  // Load saved state on component mount
+  useEffect(() => {
+    const loadSavedState = async () => {
+      try {
+        // Get current tab ID
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (activeTab.id) {
+          setCurrentTabId(activeTab.id)
+
+          // Load saved state for this tab
+          const storageKey = `tabState_${activeTab.id}`
+          const result = await chrome.storage.local.get([storageKey])
+          const savedState = result[storageKey]
+
+          if (savedState) {
+            console.log("Loading saved state for tab", activeTab.id, savedState)
+            setSelectedEffect(savedState.selectedEffect || "bitcrusher")
+            setEffectParams(savedState.effectParams || getEffectDefaults(savedState.selectedEffect || "bitcrusher"))
+            setIsCapturing(savedState.isCapturing || false)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load saved state:", error)
+      }
+    }
+
+    loadSavedState()
+  }, [])
+
+  // Save state whenever it changes
+  useEffect(() => {
+    const saveState = async () => {
+      if (currentTabId) {
+        try {
+          const storageKey = `tabState_${currentTabId}`
+          const stateToSave = {
+            selectedEffect,
+            effectParams,
+            isCapturing
+          }
+          await chrome.storage.local.set({ [storageKey]: stateToSave })
+          console.log("Saved state for tab", currentTabId, stateToSave)
+        } catch (error) {
+          console.error("Failed to save state:", error)
+        }
+      }
+    }
+
+    saveState()
+  }, [currentTabId, selectedEffect, effectParams, isCapturing])
 
   const handleEffectChange = (effectId: string) => {
     setSelectedEffect(effectId)
