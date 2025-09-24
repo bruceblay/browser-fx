@@ -11,9 +11,11 @@
   ],
   "scripts": {
     "dev": "plasmo dev",
-    "build": "plasmo build && node scripts/copy-offscreen.js",
+    "dev:setup": "npm run dev && npm run copy-offscreen:dev",
+    "build": "plasmo build && npm run copy-offscreen:prod",
     "package": "plasmo package",
-    "copy-offscreen": "node scripts/copy-offscreen.js"
+    "copy-offscreen:dev": "node scripts/copy-offscreen-dev.js",
+    "copy-offscreen:prod": "node scripts/copy-offscreen-prod.js"
   },
   "dependencies": {
     "plasmo": "0.90.5",

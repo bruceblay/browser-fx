@@ -1,7 +1,30 @@
 // Multi-effect offscreen document for Browser FX
 
+// Import Tone.js ES modules
+import { Gain, BitCrusher, Chorus, Distortion, Reverb, getContext, version } from './tone/index.js'
+
 console.log("🎵 Multi-effect offscreen document loaded - TESTING IF THIS APPEARS!")
 console.log("🎵 OFFSCREEN DOCUMENT IS WORKING AND LOADED!")
+
+// Test Tone.js availability and basic functionality
+console.log("🎵 Testing Tone.js integration...")
+try {
+  console.log("🎵 ✅ Tone.js is available! Version:", version)
+  console.log("🎵 ✅ Tone.js context:", getContext())
+
+  // Test if we can create basic effects
+  const testGain = new Gain(0.5)
+  console.log("🎵 ✅ Tone.js Gain node created successfully")
+  testGain.dispose()
+
+  // Test BitCrusher
+  const testBitCrusher = new BitCrusher(8)
+  console.log("🎵 ✅ Tone.js BitCrusher created successfully")
+  testBitCrusher.dispose()
+} catch (error) {
+  console.warn("🎵 ⚠️ Error with Tone.js integration:", error)
+}
+
 window.postMessage({ type: 'OFFSCREEN_LOADED' }, '*')
 
 let audioContext = null
