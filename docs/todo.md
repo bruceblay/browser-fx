@@ -1,2 +1,3 @@
-- add three new effects to our about page
-- add tuna.js effects?  maybe not.  that library seems old and dusty.
+- add tone.js versions of each effect and a/b compare each one
+- refine the design.  it looks very bland and uninspiring
+- 

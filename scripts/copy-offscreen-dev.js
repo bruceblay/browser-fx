@@ -35,13 +35,7 @@ const sourceFiles = [
   'offscreen-effects.js'
 ]
 
-// Copy Tone.js ES modules from node_modules
-const nodeModulesDirectories = [
-  {
-    source: 'node_modules/tone/build/esm',
-    target: 'tone'
-  }
-]
+// No external dependencies to copy
 
 // Target the dev build directory
 const buildDir = path.join(__dirname, '../build/chrome-mv3-dev')
@@ -70,16 +64,6 @@ sourceFiles.forEach(file => {
   }
 })
 
-// Copy node_modules directories
-nodeModulesDirectories.forEach(({ source, target }) => {
-  const sourcePath = path.join(__dirname, '..', source)
-  const targetPath = path.join(buildDir, target)
-
-  if (copyDirSync(sourcePath, targetPath)) {
-    console.log(`✅ Copied ${target} directory from node_modules`)
-  } else {
-    console.warn(`⚠️  Node modules directory not found: ${source}`)
-  }
-})
+// No external files to copy
 
 console.log('📦 Dev offscreen file copy complete')
