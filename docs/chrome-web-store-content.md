@@ -118,11 +118,6 @@ Required to capture audio streams from browser tabs for real-time audio effects 
 Needed to create an offscreen document for Web Audio API processing. This allows audio effects to run efficiently in the background without impacting the main browser performance or user experience.
 ```
 
-### tabs
-```
-Used to identify and manage the currently active tab for per-tab audio processing. This enables the extension to apply different effects to different tabs and maintain separate audio states.
-```
-
 ### storage
 ```
 Required to save user preferences and effect settings per tab. This allows the extension to remember which effects and parameters users prefer for different websites, providing a personalized experience.

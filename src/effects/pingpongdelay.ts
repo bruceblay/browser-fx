@@ -2,8 +2,8 @@ import { EffectConfig } from './types'
 
 export const pingPongDelayConfig: EffectConfig = {
   id: 'pingpongdelay',
-  name: 'Ping Pong Delay',
-  description: 'Stereo delay that bounces between left and right channels',
+  name: 'Delay',
+  description: 'Simple delay',
   parameters: [
     {
       key: 'delayTime',

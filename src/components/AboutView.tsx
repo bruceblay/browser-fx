@@ -74,7 +74,7 @@ export function AboutView({ onBack }: AboutViewProps) {
           <li style={{ marginBottom: 8 }}><strong>Phaser</strong> - Classic sweeping phase modulation</li>
           <li style={{ marginBottom: 8 }}><strong>Tremolo</strong> - Amplitude modulation with rate and depth</li>
           <li style={{ marginBottom: 8 }}><strong>Auto Panner</strong> - Automatic left-right panning with LFO modulation</li>
-          <li style={{ marginBottom: 8 }}><strong>Ping Pong Delay</strong> - Stereo bouncing delay effect</li>
+          <li style={{ marginBottom: 8 }}><strong>Delay</strong> - Simple delay effect</li>
           <li style={{ marginBottom: 8 }}><strong>Vibrato</strong> - Pitch modulation with multiple waveforms</li>
           <li style={{ marginBottom: 8 }}><strong>Auto Filter</strong> - LFO-controlled filter sweeps</li>
           <li style={{ marginBottom: 8 }}><strong>Pitch Shifter</strong> - Real-time pitch shifting without changing playback speed</li>
@@ -87,26 +87,6 @@ export function AboutView({ onBack }: AboutViewProps) {
           <li style={{ marginBottom: 8 }}>Adjust parameters in real-time with the sliders</li>
           <li style={{ marginBottom: 8 }}>Click "Stop" when finished</li>
         </ol>
-
-        <div style={{
-          background: 'rgba(255,255,255,0.1)',
-          padding: 8,
-          borderRadius: 8,
-          marginBottom: 16,
-          marginTop: 16,
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <strong>Credits:</strong> Most effects are inspired by and based on implementations from{" "}
-          <a
-            href="https://tonejs.github.io/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#87ceeb", textDecoration: "underline" }}
-          >
-            Tone.js
-          </a>
-          , an excellent Web Audio framework by Yotam Mann. Thank you to the Tone.js team for their incredible work on Web Audio abstractions and effect implementations.
-        </div>
       </div>
     </div>
   )
