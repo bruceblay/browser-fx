@@ -11,6 +11,14 @@ import { autoFilterConfig } from './autofilter'
 import { pitchShifterConfig } from './pitchshifter'
 import { autoPannerConfig } from './autopanner'
 import { hallReverbConfig } from './hallreverb'
+import { combFilterConfig } from './combfilter'
+import { compressorConfig } from './compressor'
+import { djEQConfig } from './djeq'
+import { flangerConfig } from './flanger'
+import { loopChopConfig } from './loopchop'
+import { ringModulatorConfig } from './ringmodulator'
+import { simpleFilterConfig } from './simplefilter'
+import { tapTempoDelayConfig } from './taptempodelay'
 
 // Registry of all available effects
 export const EFFECTS: Record<string, EffectConfig> = {
@@ -26,6 +34,14 @@ export const EFFECTS: Record<string, EffectConfig> = {
   [vibratoConfig.id]: vibratoConfig,
   [autoFilterConfig.id]: autoFilterConfig,
   [pitchShifterConfig.id]: pitchShifterConfig,
+  [combFilterConfig.id]: combFilterConfig,
+  [compressorConfig.id]: compressorConfig,
+  [djEQConfig.id]: djEQConfig,
+  [flangerConfig.id]: flangerConfig,
+  [loopChopConfig.id]: loopChopConfig,
+  [ringModulatorConfig.id]: ringModulatorConfig,
+  [simpleFilterConfig.id]: simpleFilterConfig,
+  [tapTempoDelayConfig.id]: tapTempoDelayConfig,
 }
 
 // Get list of effects for dropdown
@@ -61,5 +77,13 @@ export {
   pingPongDelayConfig,
   vibratoConfig,
   autoFilterConfig,
-  pitchShifterConfig
+  pitchShifterConfig,
+  combFilterConfig,
+  compressorConfig,
+  djEQConfig,
+  flangerConfig,
+  loopChopConfig,
+  ringModulatorConfig,
+  simpleFilterConfig,
+  tapTempoDelayConfig
 }

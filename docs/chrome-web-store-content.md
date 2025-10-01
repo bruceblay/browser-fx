@@ -15,7 +15,7 @@ Transform your web browsing experience with Browser FX - a powerful real-time au
 WHAT IS BROWSER FX?
 Browser FX is a Chrome extension that captures audio from browser tabs and processes it through high-quality audio effects in real-time. Whether you're listening to music on YouTube, Spotify, or any streaming service, watching videos, or participating in video calls, Browser FX lets you customize your audio experience with studio-quality effects.
 
-12 PROFESSIONAL AUDIO EFFECTS:
+20 PROFESSIONAL AUDIO EFFECTS:
 
 • Bitcrusher - Create lo-fi, retro digital degradation sounds
 • Reverb - Add spacious ambient reverb for depth and atmosphere
@@ -23,12 +23,20 @@ Browser FX is a Chrome extension that captures audio from browser tabs and proce
 • Distortion - Waveshaping distortion with tone control for grit and warmth
 • Chorus - Rich modulated doubling effect for lush, wide sounds
 • Phaser - Classic sweeping phase modulation for psychedelic textures
+• Flanger - Classic jet-plane whoosh flanging effect
 • Tremolo - Amplitude modulation with rate and depth control
 • Auto Panner - Automatic left-right panning with LFO modulation
 • Ping Pong Delay - Stereo bouncing delay effect for spatial audio
+• Tap Delay - Beat-synced delay with tap tempo and subdivision control
 • Vibrato - Pitch modulation with multiple waveforms
 • Auto Filter - LFO-controlled filter sweeps for dynamic movement
+• Filter - Low-pass filter with cutoff frequency and resonance control
 • Pitch Shifter - Real-time pitch shifting without changing playback speed
+• Comb Filter - Metallic resonant comb filtering for texture effects
+• Ring Mod - Metallic and robotic ring modulation effects
+• Compressor - Dynamic range compression for punch and consistency
+• DJ EQ - 3-band equalizer for quick tonal shaping
+• Loop Chop - Rhythmic audio capture and loop playback
 
 KEY FEATURES:
 • Real-time audio processing with ultra-low latency
@@ -74,8 +82,8 @@ Transform every website into your personal audio studio with Browser FX!
 ```
 Browser FX transforms your web audio experience with real-time professional audio effects.
 
-12 HIGH-QUALITY EFFECTS:
-Bitcrusher • Reverb • Hall Reverb • Distortion • Chorus • Phaser • Tremolo • Auto Panner • Ping Pong Delay • Vibrato • Auto Filter • Pitch Shifter
+20 HIGH-QUALITY EFFECTS:
+Bitcrusher • Reverb • Hall Reverb • Distortion • Chorus • Phaser • Flanger • Tremolo • Auto Panner • Ping Pong Delay • Tap Delay • Vibrato • Auto Filter • Filter • Pitch Shifter • Comb Filter • Ring Mod • Compressor • DJ EQ • Loop Chop
 
 KEY FEATURES:
 • Real-time audio processing on any website
@@ -164,7 +172,7 @@ https://github.com/bruceblay/tab-bitcrusher/issues
 
 ### Screenshot 3: About Page
 ```
-"Complete list of all 12 available audio effects with descriptions, showing the comprehensive range of professional audio processing options."
+"Complete list of all 20 available audio effects with descriptions, showing the comprehensive range of professional audio processing options."
 ```
 
 ### Screenshot 4: In Use
@@ -186,7 +194,7 @@ Browser FX applies professional real-time audio effects to browser tab audio con
 
 ### Key Benefits (for promotional materials)
 ```
-• 12 professional audio effects
+• 20 professional audio effects
 • Real-time processing with ultra-low latency
 • Per-tab effect management
 • No registration required

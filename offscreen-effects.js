@@ -876,11 +876,595 @@ function createHallReverb(context, params, tabLiveParams) {
   return { input: inputGain, output: outputGain }
 }
 
+// Tap Tempo Delay Effect Implementation
+function createTapTempoDelay(context, params, tabLiveParams) {
+  console.log('🎵 TAPTEMPO: Creating tap tempo delay effect')
+
+  // Initialize live params
+  tabLiveParams.subdivision = params.subdivision || 1  // 1/8 note default
+  tabLiveParams.feedback = params.feedback || 0.4      // 40% feedback
+  tabLiveParams.tapTempo = params.tapTempo || 120      // 120 BPM
+  tabLiveParams.wet = params.wet || 0.5                // 50% wet
+
+  // Subdivision multipliers (in beats)
+  const subdivisions = [
+    1.0,    // 0: 1/4 note
+    0.5,    // 1: 1/8 note
+    0.25,   // 2: 1/16 note
+    0.75,   // 3: dotted 1/8 (3/4 of 1/4)
+    0.333   // 4: triplet 1/8 (1/3 of 1/4)
+  ]
+
+  // Calculate delay time from BPM and subdivision
+  const subdivisionIndex = Math.floor(tabLiveParams.subdivision)
+  const beatLength = 60 / tabLiveParams.tapTempo // seconds per beat at current BPM
+  const delayTime = beatLength * subdivisions[subdivisionIndex]
+
+  const delay = context.createDelay(2.0) // Max 2 seconds for very slow tempos
+  const feedbackGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up delay time
+  delay.delayTime.value = delayTime
+
+  // Set up feedback
+  feedbackGain.gain.value = tabLiveParams.feedback
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect tap tempo delay chain
+  inputGain.connect(delay)
+  inputGain.connect(dryGain)
+
+  delay.connect(feedbackGain)
+  feedbackGain.connect(delay) // Feedback loop
+  delay.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._delay = delay
+  inputGain._feedbackGain = feedbackGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 TAPTEMPO: Created with ${tabLiveParams.tapTempo} BPM, subdivision ${subdivisionIndex}, delay ${delayTime.toFixed(3)}s`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Loop Chop Effect Implementation
+function createLoopChop(context, params, tabLiveParams) {
+  console.log('🎵 LOOPCHOP: Creating loop chop effect')
+
+  // Initialize live params
+  tabLiveParams.loopSize = params.loopSize || 2        // 1/8 beat default
+  tabLiveParams.stutterRate = params.stutterRate || 4  // 4x repeats
+  tabLiveParams.triggerMode = params.triggerMode || 0  // continuous
+  tabLiveParams.wet = params.wet || 0.8                // 80% wet
+
+  // Loop size multipliers (in beats at 120 BPM as reference)
+  const loopSizes = [
+    0.125,  // 0: 1/32 beat
+    0.25,   // 1: 1/16 beat
+    0.5,    // 2: 1/8 beat
+    1.0,    // 3: 1/4 beat
+    2.0     // 4: 1/2 beat
+  ]
+
+  // Calculate loop time (assuming 120 BPM for now)
+  const bpm = 120
+  const beatLength = 60 / bpm
+  const loopSizeIndex = Math.floor(tabLiveParams.loopSize)
+  const loopTime = beatLength * loopSizes[loopSizeIndex]
+
+  // Buffer size for loop (at 44.1kHz)
+  const bufferSize = Math.floor(loopTime * context.sampleRate)
+  console.log(`🎵 LOOPCHOP: Loop time ${loopTime.toFixed(3)}s, buffer size ${bufferSize} samples`)
+
+  // Create audio processing components
+  const scriptProcessor = context.createScriptProcessor(4096, 1, 1)
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Audio buffer for storing the loop
+  let captureBuffer = new Float32Array(bufferSize)
+  let playbackBuffer = new Float32Array(bufferSize)
+  let captureIndex = 0
+  let playbackIndex = 0
+  let isCapturing = true
+  let captureComplete = false
+  let stutterCount = 0
+  let maxStutters = Math.floor(tabLiveParams.stutterRate)
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Audio processing function
+  scriptProcessor.onaudioprocess = function(audioProcessingEvent) {
+    const inputBuffer = audioProcessingEvent.inputBuffer
+    const outputBuffer = audioProcessingEvent.outputBuffer
+    const inputData = inputBuffer.getChannelData(0)
+    const outputData = outputBuffer.getChannelData(0)
+
+    for (let i = 0; i < inputData.length; i++) {
+      let sample = inputData[i]
+
+      if (isCapturing && !captureComplete) {
+        // Capture phase: record audio into buffer
+        captureBuffer[captureIndex] = sample
+        captureIndex++
+
+        if (captureIndex >= bufferSize) {
+          // Capture complete, copy to playback buffer and start stuttering
+          playbackBuffer = new Float32Array(captureBuffer)
+          captureComplete = true
+          isCapturing = false
+          playbackIndex = 0
+          stutterCount = 0
+          console.log('🎵 LOOPCHOP: Capture complete, starting playback')
+        }
+
+        outputData[i] = sample // Pass through during capture
+      } else if (captureComplete) {
+        // Stutter phase: play back the captured loop
+        outputData[i] = playbackBuffer[playbackIndex]
+        playbackIndex++
+
+        if (playbackIndex >= bufferSize) {
+          // Loop completed
+          stutterCount++
+          playbackIndex = 0
+
+          if (stutterCount >= maxStutters) {
+            // Stutter cycle complete, start new capture
+            isCapturing = true
+            captureComplete = false
+            captureIndex = 0
+            stutterCount = 0
+            console.log('🎵 LOOPCHOP: Starting new capture cycle')
+          }
+        }
+      } else {
+        // Fallback: pass through
+        outputData[i] = sample
+      }
+    }
+  }
+
+  // Connect the processing chain
+  inputGain.connect(scriptProcessor)
+  inputGain.connect(dryGain)
+  scriptProcessor.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references
+  inputGain._scriptProcessor = scriptProcessor
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 LOOPCHOP: Created with loop size ${loopSizeIndex}, ${maxStutters} repeats`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Simple Filter Effect Implementation
+function createSimpleFilter(context, params, tabLiveParams) {
+  console.log('🎵 SIMPLEFILTER: Creating simple filter effect')
+
+  // Initialize live params
+  tabLiveParams.cutoffFreq = params.cutoffFreq || 2000     // 2kHz default
+  tabLiveParams.resonance = params.resonance || 5          // 5dB resonance
+  tabLiveParams.filterType = params.filterType || 0        // lowpass
+  tabLiveParams.wet = params.wet || 1.0                    // 100% wet
+
+  // Filter type mapping
+  const filterTypes = ['lowpass', 'highpass', 'bandpass']
+  const filterTypeIndex = Math.floor(tabLiveParams.filterType)
+  const filterTypeName = filterTypes[filterTypeIndex] || 'lowpass'
+
+  // Create filter components
+  const filter = context.createBiquadFilter()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up filter
+  filter.type = filterTypeName
+  filter.frequency.value = tabLiveParams.cutoffFreq
+  filter.Q.value = tabLiveParams.resonance  // Q factor for resonance
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect filter chain
+  inputGain.connect(filter)
+  inputGain.connect(dryGain)
+  filter.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._filter = filter
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 SIMPLEFILTER: Created ${filterTypeName} filter at ${tabLiveParams.cutoffFreq}Hz, Q=${tabLiveParams.resonance}`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Flanger Effect Implementation
+function createFlanger(context, params, tabLiveParams) {
+  console.log('🎵 FLANGER: Creating flanger effect')
+
+  // Initialize live params
+  tabLiveParams.rate = params.rate || 0.5        // 0.5Hz modulation rate
+  tabLiveParams.depth = params.depth || 50       // 50% depth
+  tabLiveParams.feedback = params.feedback || 0.3 // 30% feedback
+  tabLiveParams.wet = params.wet || 0.5          // 50% wet
+
+  // Create flanger components
+  const delay = context.createDelay(0.02) // Max 20ms delay for flanging
+  const lfo = context.createOscillator()
+  const lfoGain = context.createGain()
+  const feedbackGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up delay (base delay time for flanging)
+  const baseDelayTime = 0.005 // 5ms base delay
+  delay.delayTime.value = baseDelayTime
+
+  // Set up LFO for flanging modulation
+  lfo.frequency.value = tabLiveParams.rate
+  lfo.type = 'sine' // Smooth sine wave for classic flanger sound
+
+  // Convert depth percentage to delay modulation amount
+  const maxDelayModulation = 0.01 // Max 10ms modulation
+  const depthAmount = (tabLiveParams.depth / 100) * maxDelayModulation
+  lfoGain.gain.value = depthAmount
+
+  // Set up feedback for that classic flanger resonance
+  feedbackGain.gain.value = tabLiveParams.feedback
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect flanger chain
+  lfo.connect(lfoGain)
+  lfoGain.connect(delay.delayTime)
+
+  inputGain.connect(delay)
+  inputGain.connect(dryGain)
+
+  // Feedback loop for resonance
+  delay.connect(feedbackGain)
+  feedbackGain.connect(delay)
+
+  // Output the delayed signal
+  delay.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Start the LFO
+  lfo.start()
+
+  // Store references for parameter updates
+  inputGain._delay = delay
+  inputGain._lfo = lfo
+  inputGain._lfoGain = lfoGain
+  inputGain._feedbackGain = feedbackGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 FLANGER: Created with rate ${tabLiveParams.rate}Hz, depth ${tabLiveParams.depth}%, feedback ${Math.round(tabLiveParams.feedback * 100)}%`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// DJ EQ Effect Implementation
+function createDJEQ(context, params, tabLiveParams) {
+  console.log('🎵 DJEQ: Creating DJ EQ effect')
+
+  // Initialize live params
+  tabLiveParams.highGain = params.highGain || 0      // 0dB neutral
+  tabLiveParams.lowGain = params.lowGain || 0        // 0dB neutral
+  tabLiveParams.midGain = params.midGain || 0        // 0dB neutral
+  tabLiveParams.wet = params.wet || 1.0              // 100% wet
+
+  // Create EQ filters
+  const lowShelf = context.createBiquadFilter()
+  const midPeaking = context.createBiquadFilter()
+  const highShelf = context.createBiquadFilter()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up low shelf (bass control around 100Hz)
+  lowShelf.type = 'lowshelf'
+  lowShelf.frequency.value = 100
+  lowShelf.gain.value = tabLiveParams.lowGain
+
+  // Set up mid peaking (mid control around 1kHz)
+  midPeaking.type = 'peaking'
+  midPeaking.frequency.value = 1000
+  midPeaking.Q.value = 1.0 // Moderate Q for musical sound
+  midPeaking.gain.value = tabLiveParams.midGain
+
+  // Set up high shelf (treble control around 10kHz)
+  highShelf.type = 'highshelf'
+  highShelf.frequency.value = 10000
+  highShelf.gain.value = tabLiveParams.highGain
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect EQ chain: input -> low -> mid -> high -> output
+  inputGain.connect(lowShelf)
+  lowShelf.connect(midPeaking)
+  midPeaking.connect(highShelf)
+
+  // Wet signal through EQ
+  highShelf.connect(wetGain)
+
+  // Dry signal bypass
+  inputGain.connect(dryGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._lowShelf = lowShelf
+  inputGain._midPeaking = midPeaking
+  inputGain._highShelf = highShelf
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 DJEQ: Created 3-band EQ - Low: ${tabLiveParams.lowGain}dB, Mid: ${tabLiveParams.midGain}dB, High: ${tabLiveParams.highGain}dB`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Compressor Effect Implementation
+function createCompressor(context, params, tabLiveParams) {
+  console.log('🎵 COMPRESSOR: Creating compressor effect')
+
+  // Initialize live params
+  tabLiveParams.threshold = params.threshold || -24    // -24dB threshold
+  tabLiveParams.ratio = params.ratio || 4             // 4:1 ratio
+  tabLiveParams.attack = params.attack || 0.003       // 3ms attack
+  tabLiveParams.wet = params.wet || 1.0               // 100% wet
+
+  // Create compressor using Web Audio API's native DynamicsCompressorNode
+  const compressor = context.createDynamicsCompressor()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up compressor parameters
+  compressor.threshold.value = tabLiveParams.threshold      // When compression starts
+  compressor.ratio.value = tabLiveParams.ratio             // Compression ratio
+  compressor.attack.value = tabLiveParams.attack           // Attack time
+  compressor.release.value = 0.25                          // 250ms release (musical)
+  compressor.knee.value = 30                               // 30dB soft knee (smooth)
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect compressor chain
+  inputGain.connect(compressor)
+  inputGain.connect(dryGain)
+  compressor.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._compressor = compressor
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 COMPRESSOR: Created with threshold ${tabLiveParams.threshold}dB, ratio ${tabLiveParams.ratio}:1, attack ${Math.round(tabLiveParams.attack * 1000)}ms`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Ring Modulator Effect Implementation (TRUE ring modulation)
+function createRingModulator(context, params, tabLiveParams) {
+  console.log('🎵 RINGMOD: Creating TRUE ring modulator effect')
+
+  // Initialize live params
+  tabLiveParams.carrierFreq = params.carrierFreq || 200  // 200Hz carrier
+  tabLiveParams.mix = params.mix || 50                   // 50% mix
+  tabLiveParams.waveform = params.waveform || 0          // sine wave
+  tabLiveParams.wet = params.wet || 0.7                  // 70% wet
+
+  // Waveform types
+  const waveforms = ['sine', 'square', 'sawtooth', 'triangle']
+  const waveformIndex = Math.floor(tabLiveParams.waveform)
+  const waveformType = waveforms[waveformIndex] || 'sine'
+
+  // Create true ring modulator using ScriptProcessor
+  const scriptProcessor = context.createScriptProcessor(4096, 1, 1)
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Carrier oscillator state
+  let carrierPhase = 0
+  const sampleRate = context.sampleRate
+  let phaseIncrement = (2 * Math.PI * tabLiveParams.carrierFreq) / sampleRate
+
+  // Mix amount
+  const mixAmount = tabLiveParams.mix / 100
+
+  // Generate carrier wave sample
+  const generateCarrierSample = (phase, waveType) => {
+    switch (waveType) {
+      case 'sine':
+        return Math.sin(phase)
+      case 'square':
+        return Math.sin(phase) > 0 ? 1 : -1
+      case 'sawtooth':
+        return (2 * (phase / (2 * Math.PI))) % 2 - 1
+      case 'triangle':
+        const sawValue = (2 * (phase / (2 * Math.PI))) % 2 - 1
+        return sawValue < 0 ? -2 * sawValue - 1 : -2 * sawValue + 1
+      default:
+        return Math.sin(phase)
+    }
+  }
+
+  // True ring modulation processing
+  scriptProcessor.onaudioprocess = function(audioProcessingEvent) {
+    const inputBuffer = audioProcessingEvent.inputBuffer
+    const outputBuffer = audioProcessingEvent.outputBuffer
+    const inputData = inputBuffer.getChannelData(0)
+    const outputData = outputBuffer.getChannelData(0)
+
+    for (let i = 0; i < inputData.length; i++) {
+      // Generate carrier sample
+      const carrierSample = generateCarrierSample(carrierPhase, waveformType)
+
+      // TRUE ring modulation: multiply input by carrier
+      const modulatedSample = inputData[i] * carrierSample
+
+      // Mix between dry and modulated signal
+      outputData[i] = inputData[i] * (1 - mixAmount) + modulatedSample * mixAmount
+
+      // Update carrier phase
+      carrierPhase += phaseIncrement
+      if (carrierPhase >= 2 * Math.PI) {
+        carrierPhase -= 2 * Math.PI
+      }
+    }
+  }
+
+  // Connect the processing chain
+  inputGain.connect(scriptProcessor)
+  inputGain.connect(dryGain)
+  scriptProcessor.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._scriptProcessor = scriptProcessor
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+  // Store params for dynamic updates
+  inputGain._updateCarrierFreq = (freq) => {
+    phaseIncrement = (2 * Math.PI * freq) / sampleRate
+  }
+  inputGain._updateMix = (mix) => {
+    // mixAmount will be updated in parameter update function
+  }
+
+  console.log(`🎵 RINGMOD: Created TRUE ring modulator with ${tabLiveParams.carrierFreq}Hz ${waveformType} carrier, ${tabLiveParams.mix}% mix`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Comb Filter Effect Implementation
+function createCombFilter(context, params, tabLiveParams) {
+  console.log('🎵 COMBFILTER: Creating comb filter effect')
+
+  // Initialize live params
+  tabLiveParams.delayTime = params.delayTime || 0.01      // 10ms delay
+  tabLiveParams.feedback = params.feedback || 0.7         // 70% feedback
+  tabLiveParams.feedforward = params.feedforward || 0.5   // 50% feedforward
+  tabLiveParams.wet = params.wet || 0.6                   // 60% wet
+
+  // Create comb filter components
+  const delay = context.createDelay(0.1) // Max 100ms for comb filtering
+  const feedbackGain = context.createGain()
+  const feedforwardGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+  const combMixer = context.createGain()
+
+  // Set up delay time
+  delay.delayTime.value = tabLiveParams.delayTime
+
+  // Set up feedback (creates resonance)
+  feedbackGain.gain.value = tabLiveParams.feedback
+
+  // Set up feedforward (direct + delayed mix)
+  feedforwardGain.gain.value = tabLiveParams.feedforward
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  // Connect comb filter chain
+  // Input splits to delay and direct path
+  inputGain.connect(delay)
+  inputGain.connect(dryGain)
+  inputGain.connect(combMixer) // Direct signal to mixer
+
+  // Feedback loop for resonance
+  delay.connect(feedbackGain)
+  feedbackGain.connect(delay)
+
+  // Feedforward path (delayed signal to mixer)
+  delay.connect(feedforwardGain)
+  feedforwardGain.connect(combMixer)
+
+  // Mix the comb-filtered signal
+  combMixer.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._delay = delay
+  inputGain._feedbackGain = feedbackGain
+  inputGain._feedforwardGain = feedforwardGain
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  // Calculate fundamental frequency for logging
+  const fundamentalFreq = 1 / tabLiveParams.delayTime
+  console.log(`🎵 COMBFILTER: Created with ${Math.round(tabLiveParams.delayTime * 1000)}ms delay (${Math.round(fundamentalFreq)}Hz), feedback ${Math.round(tabLiveParams.feedback * 100)}%`)
+
+  return { input: inputGain, output: outputGain }
+}
+
 // Create effect based on ID and parameters
 function createEffect(effectId, params, tabLiveParams) {
   const context = audioContext
   console.log(`🎵 Creating effect: ${effectId}`, params)
-  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, tremolo, pingpongdelay, vibrato, autofilter`)
+  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, tremolo, pingpongdelay, vibrato, autofilter, pitchshifter, taptempodelay, loopchop, simplefilter, flanger, djeq, compressor, ringmodulator, combfilter, autopanner, hallreverb`)
 
   let result
   switch (effectId) {
@@ -939,6 +1523,54 @@ function createEffect(effectId, params, tabLiveParams) {
       console.log(`🎵 CREATING PITCH SHIFTER EFFECT`)
       result = createPitchShifter(context, params, tabLiveParams)
       console.log(`🎵 PITCH SHIFTER created:`, typeof result, result)
+      return result
+
+    case 'taptempodelay':
+      console.log(`🎵 CREATING TAP TEMPO DELAY EFFECT`)
+      result = createTapTempoDelay(context, params, tabLiveParams)
+      console.log(`🎵 TAP TEMPO DELAY created:`, typeof result, result)
+      return result
+
+    case 'loopchop':
+      console.log(`🎵 CREATING LOOP CHOP EFFECT`)
+      result = createLoopChop(context, params, tabLiveParams)
+      console.log(`🎵 LOOP CHOP created:`, typeof result, result)
+      return result
+
+    case 'simplefilter':
+      console.log(`🎵 CREATING SIMPLE FILTER EFFECT`)
+      result = createSimpleFilter(context, params, tabLiveParams)
+      console.log(`🎵 SIMPLE FILTER created:`, typeof result, result)
+      return result
+
+    case 'flanger':
+      console.log(`🎵 CREATING FLANGER EFFECT`)
+      result = createFlanger(context, params, tabLiveParams)
+      console.log(`🎵 FLANGER created:`, typeof result, result)
+      return result
+
+    case 'djeq':
+      console.log(`🎵 CREATING DJ EQ EFFECT`)
+      result = createDJEQ(context, params, tabLiveParams)
+      console.log(`🎵 DJ EQ created:`, typeof result, result)
+      return result
+
+    case 'compressor':
+      console.log(`🎵 CREATING COMPRESSOR EFFECT`)
+      result = createCompressor(context, params, tabLiveParams)
+      console.log(`🎵 COMPRESSOR created:`, typeof result, result)
+      return result
+
+    case 'ringmodulator':
+      console.log(`🎵 CREATING RING MODULATOR EFFECT`)
+      result = createRingModulator(context, params, tabLiveParams)
+      console.log(`🎵 RING MODULATOR created:`, typeof result, result)
+      return result
+
+    case 'combfilter':
+      console.log(`🎵 CREATING COMB FILTER EFFECT`)
+      result = createCombFilter(context, params, tabLiveParams)
+      console.log(`🎵 COMB FILTER created:`, typeof result, result)
       return result
 
     case 'autopanner':
@@ -1276,6 +1908,142 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       // Note: roomSize and decay require effect recreation
       if (params.roomSize !== undefined || params.decay !== undefined) {
         console.log(`🎵 Recreating reverb for tab ${tabId} for roomSize/decay change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'taptempodelay':
+      // Update wet/dry mix and feedback in real-time
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
+        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+      }
+      // Note: subdivision or tapTempo changes require effect recreation to recalculate delay time
+      if (params.subdivision !== undefined || params.tapTempo !== undefined) {
+        console.log(`🎵 Recreating tap tempo delay for tab ${tabId} for timing change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'loopchop':
+      // Update wet/dry mix in real-time
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      // Note: loopSize, stutterRate, or triggerMode changes require effect recreation
+      if (params.loopSize !== undefined || params.stutterRate !== undefined || params.triggerMode !== undefined) {
+        console.log(`🎵 Recreating loop chop effect for tab ${tabId} for parameter change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'simplefilter':
+      // Update filter parameters in real-time
+      if (params.cutoffFreq !== undefined && state.currentEffect.input._filter) {
+        state.currentEffect.input._filter.frequency.value = state.liveParams.cutoffFreq
+      }
+      if (params.resonance !== undefined && state.currentEffect.input._filter) {
+        state.currentEffect.input._filter.Q.value = state.liveParams.resonance
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      // Note: filterType changes require effect recreation
+      if (params.filterType !== undefined) {
+        console.log(`🎵 Recreating simple filter for tab ${tabId} for filter type change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'flanger':
+      // Update flanger parameters in real-time
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        state.currentEffect.input._lfo.frequency.value = state.liveParams.rate
+      }
+      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+        const maxDelayModulation = 0.01
+        const depthAmount = (state.liveParams.depth / 100) * maxDelayModulation
+        state.currentEffect.input._lfoGain.gain.value = depthAmount
+      }
+      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
+        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      break
+
+    case 'djeq':
+      // Update EQ bands in real-time
+      if (params.lowGain !== undefined && state.currentEffect.input._lowShelf) {
+        state.currentEffect.input._lowShelf.gain.value = state.liveParams.lowGain
+      }
+      if (params.midGain !== undefined && state.currentEffect.input._midPeaking) {
+        state.currentEffect.input._midPeaking.gain.value = state.liveParams.midGain
+      }
+      if (params.highGain !== undefined && state.currentEffect.input._highShelf) {
+        state.currentEffect.input._highShelf.gain.value = state.liveParams.highGain
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      break
+
+    case 'compressor':
+      // Update compressor parameters in real-time
+      if (params.threshold !== undefined && state.currentEffect.input._compressor) {
+        state.currentEffect.input._compressor.threshold.value = state.liveParams.threshold
+      }
+      if (params.ratio !== undefined && state.currentEffect.input._compressor) {
+        state.currentEffect.input._compressor.ratio.value = state.liveParams.ratio
+      }
+      if (params.attack !== undefined && state.currentEffect.input._compressor) {
+        state.currentEffect.input._compressor.attack.value = state.liveParams.attack
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      break
+
+    case 'ringmodulator':
+      // Update ring modulator parameters in real-time
+      if (params.carrierFreq !== undefined && state.currentEffect.input._updateCarrierFreq) {
+        state.currentEffect.input._updateCarrierFreq(state.liveParams.carrierFreq)
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      // Note: mix and waveform changes require effect recreation for ScriptProcessor implementation
+      if (params.mix !== undefined || params.waveform !== undefined) {
+        console.log(`🎵 Recreating ring modulator for tab ${tabId} for mix/waveform change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'combfilter':
+      // Update comb filter parameters in real-time
+      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
+        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+      }
+      if (params.feedforward !== undefined && state.currentEffect.input._feedforwardGain) {
+        state.currentEffect.input._feedforwardGain.gain.value = state.liveParams.feedforward
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
+        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+      }
+      // Note: delayTime changes require effect recreation
+      if (params.delayTime !== undefined) {
+        console.log(`🎵 Recreating comb filter for tab ${tabId} for delay time change`)
         switchEffectForTab(effectId, state.currentEffectParams, tabId)
       }
       break

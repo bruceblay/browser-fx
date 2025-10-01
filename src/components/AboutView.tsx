@@ -72,12 +72,20 @@ export function AboutView({ onBack }: AboutViewProps) {
           <li style={{ marginBottom: 8 }}><strong>Distortion</strong> - Waveshaping distortion with tone control</li>
           <li style={{ marginBottom: 8 }}><strong>Chorus</strong> - Rich modulated doubling effect</li>
           <li style={{ marginBottom: 8 }}><strong>Phaser</strong> - Classic sweeping phase modulation</li>
+          <li style={{ marginBottom: 8 }}><strong>Flanger</strong> - Classic jet-plane whoosh flanging effect</li>
           <li style={{ marginBottom: 8 }}><strong>Tremolo</strong> - Amplitude modulation with rate and depth</li>
           <li style={{ marginBottom: 8 }}><strong>Auto Panner</strong> - Automatic left-right panning with LFO modulation</li>
-          <li style={{ marginBottom: 8 }}><strong>Delay</strong> - Simple delay effect</li>
+          <li style={{ marginBottom: 8 }}><strong>Ping Pong Delay</strong> - Stereo bouncing delay effect</li>
+          <li style={{ marginBottom: 8 }}><strong>Tap Delay</strong> - Beat-synced delay with tap tempo and subdivision control</li>
           <li style={{ marginBottom: 8 }}><strong>Vibrato</strong> - Pitch modulation with multiple waveforms</li>
           <li style={{ marginBottom: 8 }}><strong>Auto Filter</strong> - LFO-controlled filter sweeps</li>
+          <li style={{ marginBottom: 8 }}><strong>Filter</strong> - Low-pass filter with cutoff frequency and resonance control</li>
           <li style={{ marginBottom: 8 }}><strong>Pitch Shifter</strong> - Real-time pitch shifting without changing playback speed</li>
+          <li style={{ marginBottom: 8 }}><strong>Comb Filter</strong> - Metallic resonant comb filtering for texture effects</li>
+          <li style={{ marginBottom: 8 }}><strong>Ring Mod</strong> - Metallic and robotic ring modulation effects</li>
+          <li style={{ marginBottom: 8 }}><strong>Compressor</strong> - Dynamic range compression for punch and consistency</li>
+          <li style={{ marginBottom: 8 }}><strong>DJ EQ</strong> - 3-band equalizer for quick tonal shaping</li>
+          <li style={{ marginBottom: 8 }}><strong>Loop Chop</strong> - Rhythmic audio capture and loop playback</li>
         </ul>
 
         <h4 style={{ color: 'white', margin: '6px 0 10px 0', fontSize: 14, fontWeight: 600 }}>How to Use:</h4>
