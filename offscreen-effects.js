@@ -42,6 +42,34 @@ function initializeAudioContext() {
   return audioContext
 }
 
+/**
+ * Smoothly transition an AudioParam to a new value to avoid clicks/pops
+ * @param {AudioParam} param - The parameter to change
+ * @param {number} targetValue - The target value
+ * @param {number} rampTime - Ramp duration in seconds (default: 0.02)
+ * @param {string} type - 'linear' or 'exponential' (default: 'exponential')
+ */
+function smoothParamChange(param, targetValue, rampTime = 0.02, type = 'exponential') {
+  if (!param || !audioContext) return
+
+  const now = audioContext.currentTime
+
+  // Cancel any scheduled changes
+  param.cancelScheduledValues(now)
+
+  // Set current value as starting point
+  param.setValueAtTime(param.value, now)
+
+  // Ramp to new value
+  if (type === 'exponential' && targetValue > 0.0001) {
+    // Exponential ramp (more natural sounding, can't reach zero)
+    param.exponentialRampToValueAtTime(targetValue, now + rampTime)
+  } else {
+    // Linear ramp (for zero values or when specified)
+    param.linearRampToValueAtTime(targetValue === 0 ? 0 : targetValue, now + rampTime)
+  }
+}
+
 // Get or create tab audio state
 function getTabState(tabId) {
   if (!tabAudioState.has(tabId)) {
@@ -1900,10 +1928,10 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'reverb':
-      // Update wet/dry mix in real-time
+      // Update wet/dry mix in real-time with smooth transitions
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       // Note: roomSize and decay require effect recreation
       if (params.roomSize !== undefined || params.decay !== undefined) {
@@ -1913,13 +1941,13 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'taptempodelay':
-      // Update wet/dry mix and feedback in real-time
+      // Update wet/dry mix and feedback in real-time with smooth transitions
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
       }
       // Note: subdivision or tapTempo changes require effect recreation to recalculate delay time
       if (params.subdivision !== undefined || params.tapTempo !== undefined) {
@@ -1929,10 +1957,10 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'loopchop':
-      // Update wet/dry mix in real-time
+      // Update wet/dry mix in real-time with smooth transitions
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       // Note: loopSize, stutterRate, or triggerMode changes require effect recreation
       if (params.loopSize !== undefined || params.stutterRate !== undefined || params.triggerMode !== undefined) {
@@ -1942,16 +1970,16 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'simplefilter':
-      // Update filter parameters in real-time
+      // Update filter parameters in real-time with smooth transitions
       if (params.cutoffFreq !== undefined && state.currentEffect.input._filter) {
-        state.currentEffect.input._filter.frequency.value = state.liveParams.cutoffFreq
+        smoothParamChange(state.currentEffect.input._filter.frequency, state.liveParams.cutoffFreq, 0.02)
       }
       if (params.resonance !== undefined && state.currentEffect.input._filter) {
-        state.currentEffect.input._filter.Q.value = state.liveParams.resonance
+        smoothParamChange(state.currentEffect.input._filter.Q, state.liveParams.resonance, 0.02)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       // Note: filterType changes require effect recreation
       if (params.filterType !== undefined) {
@@ -1961,66 +1989,66 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'flanger':
-      // Update flanger parameters in real-time
+      // Update flanger parameters in real-time with smooth transitions
       if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        state.currentEffect.input._lfo.frequency.value = state.liveParams.rate
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
       }
       if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
         const maxDelayModulation = 0.01
         const depthAmount = (state.liveParams.depth / 100) * maxDelayModulation
-        state.currentEffect.input._lfoGain.gain.value = depthAmount
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, depthAmount, 0.015)
       }
       if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       break
 
     case 'djeq':
-      // Update EQ bands in real-time
+      // Update EQ bands in real-time with smooth transitions
       if (params.lowGain !== undefined && state.currentEffect.input._lowShelf) {
-        state.currentEffect.input._lowShelf.gain.value = state.liveParams.lowGain
+        smoothParamChange(state.currentEffect.input._lowShelf.gain, state.liveParams.lowGain, 0.02)
       }
       if (params.midGain !== undefined && state.currentEffect.input._midPeaking) {
-        state.currentEffect.input._midPeaking.gain.value = state.liveParams.midGain
+        smoothParamChange(state.currentEffect.input._midPeaking.gain, state.liveParams.midGain, 0.02)
       }
       if (params.highGain !== undefined && state.currentEffect.input._highShelf) {
-        state.currentEffect.input._highShelf.gain.value = state.liveParams.highGain
+        smoothParamChange(state.currentEffect.input._highShelf.gain, state.liveParams.highGain, 0.02)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       break
 
     case 'compressor':
-      // Update compressor parameters in real-time
+      // Update compressor parameters in real-time with smooth transitions
       if (params.threshold !== undefined && state.currentEffect.input._compressor) {
-        state.currentEffect.input._compressor.threshold.value = state.liveParams.threshold
+        smoothParamChange(state.currentEffect.input._compressor.threshold, state.liveParams.threshold, 0.02)
       }
       if (params.ratio !== undefined && state.currentEffect.input._compressor) {
-        state.currentEffect.input._compressor.ratio.value = state.liveParams.ratio
+        smoothParamChange(state.currentEffect.input._compressor.ratio, state.liveParams.ratio, 0.02)
       }
       if (params.attack !== undefined && state.currentEffect.input._compressor) {
-        state.currentEffect.input._compressor.attack.value = state.liveParams.attack
+        smoothParamChange(state.currentEffect.input._compressor.attack, state.liveParams.attack, 0.02)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       break
 
     case 'ringmodulator':
-      // Update ring modulator parameters in real-time
+      // Update ring modulator parameters in real-time with smooth transitions
       if (params.carrierFreq !== undefined && state.currentEffect.input._updateCarrierFreq) {
         state.currentEffect.input._updateCarrierFreq(state.liveParams.carrierFreq)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       // Note: mix and waveform changes require effect recreation for ScriptProcessor implementation
       if (params.mix !== undefined || params.waveform !== undefined) {
@@ -2030,20 +2058,154 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       break
 
     case 'combfilter':
-      // Update comb filter parameters in real-time
+      // Update comb filter parameters in real-time with smooth transitions
       if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        state.currentEffect.input._feedbackGain.gain.value = state.liveParams.feedback
+        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
       }
       if (params.feedforward !== undefined && state.currentEffect.input._feedforwardGain) {
-        state.currentEffect.input._feedforwardGain.gain.value = state.liveParams.feedforward
+        smoothParamChange(state.currentEffect.input._feedforwardGain.gain, state.liveParams.feedforward, 0.015)
       }
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        state.currentEffect.input._wetGain.gain.value = state.liveParams.wet
-        state.currentEffect.input._dryGain.gain.value = 1 - state.liveParams.wet
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       // Note: delayTime changes require effect recreation
       if (params.delayTime !== undefined) {
         console.log(`🎵 Recreating comb filter for tab ${tabId} for delay time change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'distortion':
+      // Update wet/dry mix and tone filter in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.tone !== undefined && state.currentEffect.input._filter) {
+        smoothParamChange(state.currentEffect.input._filter.frequency, 2000 + (state.liveParams.tone * 8000), 0.025)
+      }
+      if (params.amount !== undefined && state.currentEffect.input._updateDistortionCurve) {
+        state.currentEffect.input._updateDistortionCurve()
+      }
+      break
+
+    case 'chorus':
+      // Update wet/dry mix and LFO parameters in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.rate !== undefined && state.currentEffect.input._lfo1 && state.currentEffect.input._lfo2) {
+        smoothParamChange(state.currentEffect.input._lfo1.frequency, state.liveParams.rate, 0.02)
+        smoothParamChange(state.currentEffect.input._lfo2.frequency, state.liveParams.rate * 1.3, 0.02)
+      }
+      break
+
+    case 'phaser':
+      // Update wet/dry mix and LFO parameters in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      }
+      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 1000, 0.02)
+      }
+      break
+
+    case 'tremolo':
+      // Update LFO parameters in real-time with smooth transitions
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      }
+      if (params.depth !== undefined && state.currentEffect.input._lfoGain && state.currentEffect.input._amplitude) {
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 0.5, 0.015)
+        smoothParamChange(state.currentEffect.input._amplitude.gain, 1 - state.liveParams.depth * 0.5, 0.015)
+      }
+      break
+
+    case 'pingpongdelay':
+      // Update wet/dry mix, delay time, and feedback in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.delayTime !== undefined && state.currentEffect.input._delayL && state.currentEffect.input._delayR) {
+        smoothParamChange(state.currentEffect.input._delayL.delayTime, state.liveParams.delayTime, 0.05, 'linear')
+        smoothParamChange(state.currentEffect.input._delayR.delayTime, state.liveParams.delayTime, 0.05, 'linear')
+      }
+      if (params.feedback !== undefined && state.currentEffect.input._feedbackL && state.currentEffect.input._feedbackR) {
+        smoothParamChange(state.currentEffect.input._feedbackL.gain, state.liveParams.feedback, 0.015)
+        smoothParamChange(state.currentEffect.input._feedbackR.gain, state.liveParams.feedback, 0.015)
+      }
+      break
+
+    case 'vibrato':
+      // Update wet/dry mix and LFO parameters in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      }
+      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 0.01, 0.015)
+      }
+      break
+
+    case 'autofilter':
+      // Update wet/dry mix and LFO parameters in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      }
+      if ((params.baseFreq !== undefined || params.octaves !== undefined) && state.currentEffect.input._lfoGain && state.currentEffect.input._filter) {
+        const maxFreq = state.liveParams.baseFreq * Math.pow(2, state.liveParams.octaves)
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, (maxFreq - state.liveParams.baseFreq) / 2, 0.025)
+        smoothParamChange(state.currentEffect.input._filter.frequency, state.liveParams.baseFreq, 0.025)
+      }
+      break
+
+    case 'hallreverb':
+      // Update wet/dry mix in real-time with smooth transitions
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      // Note: roomSize, decay, preDelay, and damping require effect recreation
+      if (params.roomSize !== undefined || params.decay !== undefined || params.preDelay !== undefined || params.damping !== undefined) {
+        console.log(`🎵 Recreating hall reverb for tab ${tabId} for parameter change`)
+        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'autopanner':
+      // Update LFO parameters in real-time with smooth transitions
+      if (params.rate !== undefined && state.currentEffect.input._lfo) {
+        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      }
+      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth, 0.015)
+      }
+      break
+
+    case 'pitchshifter':
+      // Pitch shifter parameters typically require effect recreation for significant changes
+      // Only wet/dry can be smoothly updated
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      // Note: pitch and delayTime changes require effect recreation
+      if (params.pitch !== undefined || params.delayTime !== undefined) {
+        console.log(`🎵 Recreating pitch shifter for tab ${tabId} for parameter change`)
         switchEffectForTab(effectId, state.currentEffectParams, tabId)
       }
       break

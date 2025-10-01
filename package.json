@@ -1,7 +1,7 @@
 {
   "name": "browser-fx",
   "displayName": "Browser FX",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Chrome extension that applies real-time audio effects to browser tabs",
   "author": "Bruce Blay <bruceblay@gmail.com>",
   "contributors": [

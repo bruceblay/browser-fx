@@ -46,6 +46,6 @@ export const combFilterConfig: EffectConfig = {
     delayTime: 0.01,     // 10ms delay (100Hz fundamental)
     feedback: 0.95,       // 95% feedback for resonance
     feedforward: 0.5,    // 50% feedforward
-    wet: 0.6             // 60% wet
+    wet: 0.9             // 90% wet
   }
 }
