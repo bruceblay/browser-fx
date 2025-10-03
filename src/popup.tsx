@@ -18,6 +18,23 @@ function IndexPopup() {
 
   const currentEffectConfig = getEffectConfig(selectedEffect)
 
+  // Dynamically adjust popup height based on number of parameters
+  useEffect(() => {
+    const paramCount = currentEffectConfig?.parameters?.length || 0
+    // Base height (310px for 3 params) + additional height per extra param
+    const height = paramCount <= 3 ? 310 : 415
+
+    // Reset height first to allow shrinking
+    document.body.style.height = 'auto'
+    document.body.style.minHeight = 'auto'
+
+    // Then set the new height
+    requestAnimationFrame(() => {
+      document.body.style.height = `${height}px`
+      document.body.style.minHeight = `${height}px`
+    })
+  }, [currentEffectConfig])
+
   // Load saved state on component mount
   useEffect(() => {
     const loadSavedState = async () => {
@@ -74,15 +91,11 @@ function IndexPopup() {
     document.body.style.margin = '0'
     document.body.style.padding = '0'
     document.body.style.background = '#111'
-    document.body.style.minHeight = '100vh'
-    document.documentElement.style.minHeight = '100vh'
 
     return () => {
       document.body.style.margin = ''
       document.body.style.padding = ''
       document.body.style.background = ''
-      document.body.style.minHeight = ''
-      document.documentElement.style.minHeight = ''
     }
   }, [])
 
@@ -172,10 +185,13 @@ function IndexPopup() {
     )
   }
 
+  const paramCount = currentEffectConfig?.parameters?.length || 0
+  const popupHeight = paramCount <= 3 ? 310 : 415
+
   return (
     <div style={{
       width: 380,
-      minHeight: 440,
+      height: popupHeight,
       padding: 0,
       background: 'transparent',
       fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -185,7 +201,7 @@ function IndexPopup() {
     }}>
       <div style={{
         padding: '14px 18px',
-        minHeight: '440px',
+        height: `${popupHeight}px`,
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column'

@@ -36,7 +36,7 @@ Browser FX is a Chrome extension that captures audio from browser tabs and proce
 • Ring Mod - Metallic and robotic ring modulation effects
 • Compressor - Dynamic range compression for punch and consistency
 • DJ EQ - 3-band equalizer for quick tonal shaping
-• Loop Chop - Rhythmic audio capture and loop playback
+• CD Skipper - Rhythmic audio capture and loop playback
 
 KEY FEATURES:
 • Real-time audio processing with ultra-low latency
@@ -83,7 +83,7 @@ Transform every website into your personal audio studio with Browser FX!
 Browser FX transforms your web audio experience with real-time professional audio effects.
 
 20 HIGH-QUALITY EFFECTS:
-Bitcrusher • Reverb • Hall Reverb • Distortion • Chorus • Phaser • Flanger • Tremolo • Auto Panner • Ping Pong Delay • Tap Delay • Vibrato • Auto Filter • Filter • Pitch Shifter • Comb Filter • Ring Mod • Compressor • DJ EQ • Loop Chop
+Bitcrusher • Reverb • Hall Reverb • Distortion • Chorus • Phaser • Flanger • Tremolo • Auto Panner • Ping Pong Delay • Tap Delay • Vibrato • Auto Filter • Filter • Pitch Shifter • Comb Filter • Ring Mod • Compressor • DJ EQ • CD Skipper
 
 KEY FEATURES:
 • Real-time audio processing on any website

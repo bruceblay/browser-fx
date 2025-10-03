@@ -147,7 +147,7 @@ export function EffectControls({
       }}>
         {!isCapturing
           ? "Controls will be active when audio capture is running"
-          : ""
+          : <span>&nbsp;</span>
         }
       </div>
     </div>

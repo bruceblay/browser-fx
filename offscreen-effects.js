@@ -967,9 +967,9 @@ function createTapTempoDelay(context, params, tabLiveParams) {
   return { input: inputGain, output: outputGain }
 }
 
-// Loop Chop Effect Implementation
+// CD Skipper Effect Implementation
 function createLoopChop(context, params, tabLiveParams) {
-  console.log('🎵 LOOPCHOP: Creating loop chop effect')
+  console.log('🎵 CDSKIPPER: Creating cd skipper effect')
 
   // Initialize live params
   tabLiveParams.loopSize = params.loopSize || 2        // 1/8 beat default

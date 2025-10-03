@@ -23,9 +23,7 @@ export function AboutView({ onBack }: AboutViewProps) {
           fontWeight: 'bold',
           margin: 0,
           marginBottom: '8px',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text'
+          color: 'white'
         }}>
           About Browser FX
         </h1>
@@ -66,7 +64,7 @@ export function AboutView({ onBack }: AboutViewProps) {
         <h4 style={{ color: 'white', margin: '4px 0 10px 0', fontSize: 14, fontWeight: 600 }}>Available Effects:</h4>
         <ul style={{ color: 'white', paddingLeft: 20, margin: '0 0 6px 0' }}>
           <li style={{ marginBottom: 8 }}><strong>Bitcrusher</strong> - Digital degradation and lo-fi sounds</li>
-          <li style={{ marginBottom: 8 }}><strong>Loop Chop</strong> - Rhythmic audio capture and loop playback</li>
+          <li style={{ marginBottom: 8 }}><strong>CD Skipper</strong> - Rhythmic audio capture and loop playback</li>
           <li style={{ marginBottom: 8 }}><strong>Reverb</strong> - Spacious ambient reverb</li>
           <li style={{ marginBottom: 8 }}><strong>Filter</strong> - Low-pass filter with cutoff frequency and resonance control</li>
           <li style={{ marginBottom: 8 }}><strong>Vibrato</strong> - Pitch modulation with multiple waveforms</li>
