@@ -34,7 +34,7 @@ export const distortionConfig: EffectConfig = {
     }
   ],
   defaultValues: {
-    amount: 0.7,
+    amount: 0.5,
     tone: 0.5,
     wet: 0.5
   }

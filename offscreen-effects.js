@@ -1689,52 +1689,114 @@ function switchEffectForTab(effectId, params, tabId) {
   }
 
   const state = getTabState(tabId)
-
-  // Disconnect current effect if exists
-  if (state.currentEffect) {
-    try {
-      if (state.sourceNode) {
-        state.sourceNode.disconnect()
-      }
-
-      // Handle different effect node structures
-      if (state.currentEffect.disconnect) {
-        state.currentEffect.disconnect()
-      } else if (state.currentEffect.input && state.currentEffect.output) {
-        state.currentEffect.output.disconnect()
-      }
-    } catch (error) {
-      console.warn(`🎵 Error disconnecting current effect for tab ${tabId}:`, error)
-    }
-  }
+  const oldEffect = state.currentEffect
+  const crossfadeTime = 0.05 // 50ms crossfade
 
   // Create new effect for this tab
-  state.currentEffect = createEffect(effectId, params, state.liveParams)
+  const newEffect = createEffect(effectId, params, state.liveParams)
+
+  // If we have active audio, do a crossfade
+  if (state.sourceNode && state.destinationNode && oldEffect) {
+    try {
+      const now = audioContext.currentTime
+
+      // Create crossfade gain nodes
+      const oldGain = audioContext.createGain()
+      const newGain = audioContext.createGain()
+
+      // Set initial gain values
+      oldGain.gain.value = 1.0
+      newGain.gain.value = 0.0
+
+      // Schedule crossfade
+      oldGain.gain.setValueAtTime(1.0, now)
+      oldGain.gain.linearRampToValueAtTime(0.0, now + crossfadeTime)
+      newGain.gain.setValueAtTime(0.0, now)
+      newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeTime)
+
+      // Disconnect source from old effect
+      state.sourceNode.disconnect()
+
+      // Connect old effect through fade-out gain
+      if (oldEffect.input && oldEffect.output) {
+        state.sourceNode.connect(oldEffect.input)
+        oldEffect.output.disconnect()
+        oldEffect.output.connect(oldGain)
+      } else {
+        state.sourceNode.connect(oldEffect)
+        oldEffect.disconnect()
+        oldEffect.connect(oldGain)
+      }
+      oldGain.connect(state.destinationNode)
+
+      // Connect new effect through fade-in gain
+      if (newEffect.input && newEffect.output) {
+        state.sourceNode.connect(newEffect.input)
+        newEffect.output.connect(newGain)
+      } else {
+        state.sourceNode.connect(newEffect)
+        newEffect.connect(newGain)
+      }
+      newGain.connect(state.destinationNode)
+
+      // Clean up old effect after crossfade
+      setTimeout(() => {
+        try {
+          oldGain.disconnect()
+          if (oldEffect.disconnect) {
+            oldEffect.disconnect()
+          } else if (oldEffect.input && oldEffect.output) {
+            oldEffect.output.disconnect()
+          }
+        } catch (e) {
+          console.warn(`🎵 Error cleaning up old effect for tab ${tabId}:`, e)
+        }
+      }, crossfadeTime * 1000 + 100)
+
+      console.log(`🎵 Crossfaded to new effect for tab ${tabId}`)
+    } catch (error) {
+      console.error(`🎵 ERROR during crossfade for tab ${tabId}:`, error)
+      // Fall back to immediate switch if crossfade fails
+      if (oldEffect) {
+        try {
+          state.sourceNode.disconnect()
+          if (oldEffect.disconnect) {
+            oldEffect.disconnect()
+          } else if (oldEffect.input && oldEffect.output) {
+            oldEffect.output.disconnect()
+          }
+        } catch (e) {}
+      }
+
+      // Connect new effect
+      if (newEffect.input && newEffect.output) {
+        state.sourceNode.connect(newEffect.input)
+        newEffect.output.connect(state.destinationNode)
+      } else {
+        state.sourceNode.connect(newEffect)
+        newEffect.connect(state.destinationNode)
+      }
+    }
+  } else if (state.sourceNode && state.destinationNode) {
+    // No old effect, just connect the new one
+    try {
+      if (newEffect.input && newEffect.output) {
+        state.sourceNode.connect(newEffect.input)
+        newEffect.output.connect(state.destinationNode)
+      } else {
+        state.sourceNode.connect(newEffect)
+        newEffect.connect(state.destinationNode)
+      }
+      console.log(`🎵 Audio chain connected for tab ${tabId} with ${effectId}`)
+    } catch (error) {
+      console.error(`🎵 ERROR connecting audio chain for tab ${tabId}:`, error)
+    }
+  }
+
+  // Update state
+  state.currentEffect = newEffect
   state.currentEffectId = effectId
   state.currentEffectParams = params
-
-  // Reconnect audio chain if we have active audio
-  if (state.sourceNode && state.destinationNode) {
-    console.log(`🎵 CONNECTING AUDIO for tab ${tabId}: effect type=${typeof state.currentEffect}, has input=${!!state.currentEffect.input}, has output=${!!state.currentEffect.output}`)
-    try {
-      if (state.currentEffect.input && state.currentEffect.output) {
-        // Complex effect with input/output nodes
-        console.log(`🎵 COMPLEX EFFECT CONNECTION for tab ${tabId}: sourceNode -> ${state.currentEffect.input.constructor.name} -> ${state.currentEffect.output.constructor.name} -> destinationNode`)
-        state.sourceNode.connect(state.currentEffect.input)
-        state.currentEffect.output.connect(state.destinationNode)
-      } else {
-        // Simple effect (like bitcrusher ScriptProcessor)
-        console.log(`🎵 SIMPLE EFFECT CONNECTION for tab ${tabId}: sourceNode -> ${state.currentEffect.constructor.name} -> destinationNode`)
-        state.sourceNode.connect(state.currentEffect)
-        state.currentEffect.connect(state.destinationNode)
-      }
-      console.log(`🎵 Audio chain reconnected successfully for tab ${tabId} with ${effectId}`)
-    } catch (error) {
-      console.error(`🎵 ERROR reconnecting audio chain for tab ${tabId}:`, error)
-    }
-  } else {
-    console.warn(`🎵 No audio to connect for tab ${tabId}: sourceNode=${!!state.sourceNode}, destinationNode=${!!state.destinationNode}`)
-  }
 }
 
 // Update parameters of current effect in real-time
