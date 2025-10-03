@@ -22,7 +22,7 @@ function IndexPopup() {
   useEffect(() => {
     const paramCount = currentEffectConfig?.parameters?.length || 0
     // Base height (310px for 3 params) + additional height per extra param
-    const height = paramCount <= 3 ? 310 : 415
+    const height = paramCount <= 3 ? 300 : 400
 
     // Reset height first to allow shrinking
     document.body.style.height = 'auto'
@@ -186,7 +186,7 @@ function IndexPopup() {
   }
 
   const paramCount = currentEffectConfig?.parameters?.length || 0
-  const popupHeight = paramCount <= 3 ? 310 : 415
+  const popupHeight = paramCount <= 3 ? 300 : 400
 
   return (
     <div style={{
@@ -208,8 +208,8 @@ function IndexPopup() {
       }}>
         <Header onInfoClick={() => setShowAbout(true)} />
 
-        <div style={{ marginTop: 8 }}>
-          <label style={{
+        <div style={{ marginTop: 16 }}>
+          {/* <label style={{
             display: 'block',
             marginBottom: 8,
             fontSize: 14,
@@ -217,7 +217,7 @@ function IndexPopup() {
             color: 'rgba(255,255,255,0.9)'
           }}>
             Select Effect
-          </label>
+          </label> */}
           <EffectSelector
             selectedEffect={selectedEffect}
             onEffectChange={handleEffectChange}

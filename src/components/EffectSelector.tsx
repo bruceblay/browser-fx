@@ -17,10 +17,11 @@ export function EffectSelector({ selectedEffect, onEffectChange }: EffectSelecto
           borderRadius: 8,
           background: 'rgba(255,255,255,0.1)',
           color: 'white',
-          fontSize: 12,
+          fontSize: 14,
           cursor: 'pointer',
           outline: 'none',
-          backdropFilter: 'blur(10px)'
+          backdropFilter: 'blur(10px)',
+          border: 0
         }}
       >
         {getEffectsList().map(effect => (

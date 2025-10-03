@@ -144,6 +144,7 @@ export function EffectControls({
         fontStyle: 'italic',
         marginTop: 8,
         marginBottom: 8,
+        textAlign: 'center'
       }}>
         {!isCapturing
           ? "Controls will be active when audio capture is running"

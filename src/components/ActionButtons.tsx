@@ -57,7 +57,6 @@ export function ActionButtons({
           style={{
             ...buttonBaseStyle,
             background: 'rgba(255,255,255,0.15)',
-            border: '1px solid rgba(255,255,255,0.25)',
             color: 'white',
             marginRight: 0,
             flex: 1
@@ -71,16 +70,9 @@ export function ActionButtons({
           style={{
             ...buttonBaseStyle,
             background: 'rgba(220,53,69,0.15)',
-            border: '1px solid rgba(220,53,69,0.3)',
             color: 'white',
             marginRight: 0,
             flex: 1
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)'
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)'
           }}
         >
           Stop
