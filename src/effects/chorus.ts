@@ -47,5 +47,6 @@ export const chorusConfig: EffectConfig = {
     depth: 0.07,
     delay: 5,
     wet: 0.9
-  }
+  },
+  sliderColor: '#87CEEB' // Boss CE-2 light blue
 }

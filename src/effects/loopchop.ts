@@ -48,6 +48,7 @@ export const loopChopConfig: EffectConfig = {
     triggerMode: 0,     // continuous
     wet: 0.8            // 80% wet
   },
+  sliderColor: '#DC143C', // Crimson for glitchy/rhythmic
   xyMapping: {
     xParam: {
       parameterIndex: 0, // loopSize parameter

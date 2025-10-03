@@ -48,6 +48,7 @@ export const flangerConfig: EffectConfig = {
     feedback: 0.3,   // 30% feedback
     wet: 0.5         // 50% wet
   },
+  sliderColor: '#9370DB', // Boss BF-2 purple
   xyMapping: {
     xParam: {
       parameterIndex: 0, // rate parameter

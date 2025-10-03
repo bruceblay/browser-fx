@@ -47,5 +47,6 @@ export const combFilterConfig: EffectConfig = {
     feedback: 0.95,       // 95% feedback for resonance
     feedforward: 0.5,    // 50% feedforward
     wet: 0.9             // 90% wet
-  }
+  },
+  sliderColor: '#B8860B' // Dark goldenrod for metallic/resonant
 }

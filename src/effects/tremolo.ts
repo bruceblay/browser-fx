@@ -47,5 +47,6 @@ export const tremoloConfig: EffectConfig = {
     depth: 0.9,
     spread: 40,
     wet: 0.9
-  }
+  },
+  sliderColor: '#2C5F2D' // Boss TR-2 dark forest green
 }

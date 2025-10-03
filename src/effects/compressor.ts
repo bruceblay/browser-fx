@@ -48,6 +48,7 @@ export const compressorConfig: EffectConfig = {
     attack: 0.2,
     wet: 1.0           // 100% wet (full compression)
   },
+  sliderColor: '#4169E1', // Royal blue
   xyMapping: {
     xParam: {
       parameterIndex: 0, // threshold parameter

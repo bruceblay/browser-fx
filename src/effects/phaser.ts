@@ -47,5 +47,6 @@ export const phaserConfig: EffectConfig = {
     depth: 0.4,
     feedback: 0.7,
     wet: 1.0
-  }
+  },
+  sliderColor: '#32CD32' // Lime green
 }

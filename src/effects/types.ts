@@ -16,6 +16,7 @@ export interface EffectConfig {
   description: string
   parameters: ParameterConfig[]
   defaultValues: Record<string, number>
+  sliderColor: string
 }
 
 export interface EffectState {

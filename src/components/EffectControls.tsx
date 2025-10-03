@@ -57,7 +57,7 @@ export function EffectControls({
               onChange={(e) => onParamUpdate(param.key, parseFloat(e.target.value))}
               style={{
                 width: '100%',
-                accentColor: "#87ceeb"
+                accentColor: effectConfig.sliderColor
               }}
               disabled={!isCapturing}
             />

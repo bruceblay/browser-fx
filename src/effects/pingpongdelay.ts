@@ -47,5 +47,6 @@ export const pingPongDelayConfig: EffectConfig = {
     feedback: 0.5,
     stereoSpread: 1.0,
     wet: 0.7
-  }
+  },
+  sliderColor: '#50C878' // Boss DD-7 green
 }

@@ -57,5 +57,6 @@ export const autoFilterConfig: EffectConfig = {
     baseFreq: 990,
     octaves: 1.0,
     wet: 1.0
-  }
+  },
+  sliderColor: '#8A2BE2' // Boss FT-2 violet
 }

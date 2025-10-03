@@ -48,6 +48,7 @@ export const djEQConfig: EffectConfig = {
     midGain: 0,      // Neutral mid frequencies (1kHz)
     wet: 1.0         // 100% wet (full EQ)
   },
+  sliderColor: '#D4C5A9', // Boss GE-7 beige
   xyMapping: {
     xParam: {
       parameterIndex: 0, // highGain parameter

@@ -37,5 +37,6 @@ export const bitcrusherConfig: EffectConfig = {
     bits: 8,
     normalRange: 0.4,
     wet: 0.5
-  }
+  },
+  sliderColor: '#E74C3C' // Red for digital/lo-fi
 }

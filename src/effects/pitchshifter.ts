@@ -47,5 +47,6 @@ export const pitchShifterConfig: EffectConfig = {
     windowSize: 0.05, // 50ms window
     overlap: 0.5,     // 50% overlap
     wet: 1.0          // 100% wet
-  }
+  },
+  sliderColor: '#00CED1' // Boss PS-6 turquoise
 }

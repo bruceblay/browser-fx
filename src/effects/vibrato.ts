@@ -47,5 +47,6 @@ export const vibratoConfig: EffectConfig = {
     depth: 0.4,
     type: 0,
     wet: 1.0
-  }
+  },
+  sliderColor: '#00008B' // Deep blue
 }

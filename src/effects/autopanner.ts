@@ -47,5 +47,6 @@ export const autoPannerConfig: EffectConfig = {
     depth: 0.8,  // 80% depth
     type: 0,     // Sine wave
     wet: 1.0     // 100% wet
-  }
+  },
+  sliderColor: '#20B2AA' // Boss PN-2 light sea green
 }

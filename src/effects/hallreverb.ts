@@ -57,5 +57,6 @@ export const hallReverbConfig: EffectConfig = {
     preDelay: 0.03,  // 30ms pre-delay
     damping: 6000,   // 6kHz high cut
     wet: 0.4         // 40% wet
-  }
+  },
+  sliderColor: '#6495ED' // Boss RV-6 cornflower blue
 }

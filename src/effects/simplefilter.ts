@@ -48,6 +48,7 @@ export const simpleFilterConfig: EffectConfig = {
     filterType: 0,       // lowpass
     wet: 1.0             // 100% wet (full filtering)
   },
+  sliderColor: '#32CD32', // Lime green for filter sweep
   xyMapping: {
     xParam: {
       parameterIndex: 0, // cutoffFreq parameter

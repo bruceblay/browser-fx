@@ -48,6 +48,7 @@ export const tapTempoDelayConfig: EffectConfig = {
     tapTempo: 120,     // 120 BPM
     wet: 0.5           // 50% wet
   },
+  sliderColor: '#3CB371', // Medium sea green (Boss DD-6)
   xyMapping: {
     xParam: {
       parameterIndex: 0, // subdivision parameter

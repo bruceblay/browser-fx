@@ -48,6 +48,7 @@ export const ringModulatorConfig: EffectConfig = {
     waveform: 0,       // sine wave carrier
     wet: 0.7           // 70% wet
   },
+  sliderColor: '#DDA0DD', // Light purple (plum)
   xyMapping: {
     xParam: {
       parameterIndex: 0, // carrierFreq parameter

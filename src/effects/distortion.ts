@@ -37,5 +37,6 @@ export const distortionConfig: EffectConfig = {
     amount: 0.5,
     tone: 0.5,
     wet: 0.5
-  }
+  },
+  sliderColor: '#FF8C42' // Boss DS-1 orange
 }
