@@ -39,14 +39,6 @@ export function ActionButtons({
           opacity: 1,
           flex: 1
         }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.2)'
-          e.currentTarget.style.color = 'white'
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-          e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
-        }}
       >
         Clear
       </button>
