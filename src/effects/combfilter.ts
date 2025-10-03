@@ -34,7 +34,7 @@ export const combFilterConfig: EffectConfig = {
     },
     {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

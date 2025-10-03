@@ -209,7 +209,7 @@ const crushed = Math.round(lastSample * step) / step;
    - **Our:** Combines bit-crushing + sample rate reduction (unique feature)
    - **Impact:** Our approach is more comprehensive but less focused
 
-5. **Wet/Dry Mixing:**
+5. **Dry/Wet Mixing:**
    - **Tone.js:** Uses CrossFade component with `wet` parameter (0-1)
    - **Our:** Manual wet/dry mix: `input * (1 - wet) + crushed * wet`
    - **Impact:** Similar result, different implementation

@@ -7,7 +7,7 @@ export const simpleFilterConfig: EffectConfig = {
   parameters: [
     {
       key: 'cutoffFreq',
-      label: 'Cutoff Frequency',
+      label: 'Cutoff',
       min: 100,
       max: 8000,
       step: 50,
@@ -25,7 +25,7 @@ export const simpleFilterConfig: EffectConfig = {
     },
     {
       key: 'filterType',
-      label: 'Filter Type',
+      label: 'Type',
       min: 0,
       max: 2,
       step: 1,
@@ -34,7 +34,7 @@ export const simpleFilterConfig: EffectConfig = {
     },
     {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

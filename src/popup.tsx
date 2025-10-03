@@ -73,7 +73,7 @@ function IndexPopup() {
   useEffect(() => {
     document.body.style.margin = '0'
     document.body.style.padding = '0'
-    document.body.style.background = 'linear-gradient(135deg, #374151 0%, #111827 100%)'
+    document.body.style.background = '#111'
     document.body.style.minHeight = '100vh'
     document.documentElement.style.minHeight = '100vh'
 

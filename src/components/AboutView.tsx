@@ -23,7 +23,6 @@ export function AboutView({ onBack }: AboutViewProps) {
           fontWeight: 'bold',
           margin: 0,
           marginBottom: '8px',
-          background: 'linear-gradient(45deg, #fff, #e0e0ff)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text'

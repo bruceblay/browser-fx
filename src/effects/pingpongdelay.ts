@@ -7,7 +7,7 @@ export const pingPongDelayConfig: EffectConfig = {
   parameters: [
     {
       key: 'delayTime',
-      label: 'Delay Time',
+      label: 'Time',
       min: 0.01,
       max: 1.0,
       step: 0.01,
@@ -24,17 +24,8 @@ export const pingPongDelayConfig: EffectConfig = {
       unit: '%'
     },
     {
-      key: 'stereoSpread',
-      label: 'Stereo Spread',
-      min: 0,
-      max: 1,
-      step: 0.01,
-      default: 1.0,
-      unit: '%'
-    },
-    {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

@@ -7,7 +7,7 @@ export const reverbConfig: EffectConfig = {
   parameters: [
     {
       key: 'roomSize',
-      label: 'Room Size',
+      label: 'Size',
       min: 0,
       max: 1,
       step: 0.01,
@@ -16,7 +16,7 @@ export const reverbConfig: EffectConfig = {
     },
     {
       key: 'decay',
-      label: 'Decay Time',
+      label: 'Decay',
       min: 0.1,
       max: 10,
       step: 0.1,
@@ -25,7 +25,7 @@ export const reverbConfig: EffectConfig = {
     },
     {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

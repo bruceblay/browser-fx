@@ -7,7 +7,7 @@ export const djEQConfig: EffectConfig = {
   parameters: [
     {
       key: 'highGain',
-      label: 'High Gain',
+      label: 'High',
       min: -15,
       max: 15,
       step: 0.5,
@@ -16,7 +16,7 @@ export const djEQConfig: EffectConfig = {
     },
     {
       key: 'midGain',
-      label: 'Mid Gain',
+      label: 'Mid',
       min: -15,
       max: 15,
       step: 0.5,
@@ -25,7 +25,7 @@ export const djEQConfig: EffectConfig = {
     },
     {
       key: 'lowGain',
-      label: 'Low Gain',
+      label: 'Low',
       min: -15,
       max: 15,
       step: 0.5,
@@ -34,7 +34,7 @@ export const djEQConfig: EffectConfig = {
     },
     {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

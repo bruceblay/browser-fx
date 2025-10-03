@@ -7,7 +7,7 @@ export const ringModulatorConfig: EffectConfig = {
   parameters: [
     {
       key: 'carrierFreq',
-      label: 'Carrier Frequency',
+      label: 'Carrier Freq',
       min: 10,
       max: 2000,
       step: 10,
@@ -34,7 +34,7 @@ export const ringModulatorConfig: EffectConfig = {
     },
     {
       key: 'wet',
-      label: 'Wet/Dry Mix',
+      label: 'Dry/Wet',
       min: 0,
       max: 1,
       step: 0.01,

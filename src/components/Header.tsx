@@ -13,10 +13,7 @@ export function Header({ onInfoClick }: HeaderProps) {
         fontSize: 18,
         fontWeight: 'bold',
         margin: 0,
-        background: 'linear-gradient(45deg, #fff, #e0e0ff)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        backgroundClip: 'text'
+        color: 'white'
       }}>
         Browser FX
       </h1>
