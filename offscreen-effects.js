@@ -718,8 +718,8 @@ function createPitchShifter(context, params, tabLiveParams) {
   const outputGain = context.createGain()
   const mixer = context.createGain()
 
-  // Convert semitones to frequency ratio
-  const pitchRatio = Math.pow(2, tabLiveParams.pitch / 12)
+  // Convert semitones to frequency ratio (inverted to fix reversed pitch)
+  const pitchRatio = Math.pow(2, -tabLiveParams.pitch / 12)
 
   // Set up delays for pitch shifting
   const baseDelay = tabLiveParams.windowSize
