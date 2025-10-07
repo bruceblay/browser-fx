@@ -1,9 +1,9 @@
 import { EffectConfig } from './types'
 
-export const pingPongDelayConfig: EffectConfig = {
-  id: 'pingpongdelay',
+export const delayConfig: EffectConfig = {
+  id: 'delay',
   name: 'Delay',
-  description: 'Simple delay',
+  description: 'Simple delay with feedback',
   parameters: [
     {
       key: 'delayTime',

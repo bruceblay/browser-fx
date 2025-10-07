@@ -521,65 +521,52 @@ function createTremolo(context, params) {
   return { input: inputGain, output: outputGain }
 }
 
-// Ping Pong Delay Effect Implementation
-function createPingPongDelay(context, params) {
-  console.log('🎵 PINGPONG: Creating ping pong delay effect')
+// Simple Delay Effect Implementation
+function createDelay(context, params) {
+  console.log('🎵 DELAY: Creating delay effect')
 
   // Initialize live params
   liveParams.delayTime = params.delayTime || 0.3   // 300ms default
   liveParams.feedback = params.feedback || 0.4     // 40% feedback
   liveParams.wet = params.wet || 0.4               // 40% wet
 
-  const delayL = context.createDelay(1)
-  const delayR = context.createDelay(1)
-  const feedbackL = context.createGain()
-  const feedbackR = context.createGain()
+  const delayNode = context.createDelay(2)  // Max 2 seconds
+  const feedbackGain = context.createGain()
   const wetGain = context.createGain()
   const dryGain = context.createGain()
   const inputGain = context.createGain()
   const outputGain = context.createGain()
-  const merger = context.createChannelMerger(2)
-  const splitter = context.createChannelSplitter(2)
 
-  // Set up delays
-  delayL.delayTime.value = liveParams.delayTime
-  delayR.delayTime.value = liveParams.delayTime
+  // Set up delay time
+  delayNode.delayTime.value = liveParams.delayTime
 
   // Set up feedback
-  feedbackL.gain.value = liveParams.feedback
-  feedbackR.gain.value = liveParams.feedback
+  feedbackGain.gain.value = liveParams.feedback
 
   // Set up wet/dry mix
   wetGain.gain.value = liveParams.wet
   dryGain.gain.value = 1 - liveParams.wet
 
-  // Connect ping pong delay chain
-  inputGain.connect(splitter)
-  splitter.connect(delayL, 0)  // Left input to left delay
-  splitter.connect(delayR, 1)  // Right input to right delay
+  // Connect delay chain
+  // Input -> delay -> feedback loop
+  inputGain.connect(delayNode)
+  delayNode.connect(feedbackGain)
+  feedbackGain.connect(delayNode)  // Feedback loop
 
-  // Cross feedback for ping pong effect
-  delayL.connect(feedbackR)
-  delayR.connect(feedbackL)
-  feedbackL.connect(delayL)
-  feedbackR.connect(delayR)
-
-  // Output
-  delayL.connect(merger, 0, 1)  // Left delay to right output
-  delayR.connect(merger, 0, 0)  // Right delay to left output
-  merger.connect(wetGain)
-
+  // Wet/dry mix
+  delayNode.connect(wetGain)
   inputGain.connect(dryGain)
+
   wetGain.connect(outputGain)
   dryGain.connect(outputGain)
 
-  // Store references
-  inputGain._delayL = delayL
-  inputGain._delayR = delayR
-  inputGain._feedbackL = feedbackL
-  inputGain._feedbackR = feedbackR
+  // Store references for live parameter updates
+  inputGain._delayNode = delayNode
+  inputGain._feedbackGain = feedbackGain
   inputGain._wetGain = wetGain
   inputGain._dryGain = dryGain
+
+  console.log(`🎵 DELAY: Created with ${Math.round(liveParams.delayTime * 1000)}ms delay, ${Math.round(liveParams.feedback * 100)}% feedback`)
 
   return { input: inputGain, output: outputGain }
 }
@@ -1492,7 +1479,7 @@ function createCombFilter(context, params, tabLiveParams) {
 function createEffect(effectId, params, tabLiveParams) {
   const context = audioContext
   console.log(`🎵 Creating effect: ${effectId}`, params)
-  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, tremolo, pingpongdelay, vibrato, autofilter, pitchshifter, taptempodelay, loopchop, simplefilter, flanger, djeq, compressor, ringmodulator, combfilter, autopanner, hallreverb`)
+  console.log(`🎵 Available effects in switch: bitcrusher, reverb, distortion, chorus, phaser, tremolo, delay, vibrato, autofilter, pitchshifter, taptempodelay, loopchop, simplefilter, flanger, djeq, compressor, ringmodulator, combfilter, autopanner, hallreverb`)
 
   let result
   switch (effectId) {
@@ -1529,10 +1516,10 @@ function createEffect(effectId, params, tabLiveParams) {
       console.log(`🎵 TREMOLO created:`, typeof result, result)
       return result
 
-    case 'pingpongdelay':
-      console.log(`🎵 CREATING PINGPONG DELAY EFFECT`)
-      result = createPingPongDelay(context, params)
-      console.log(`🎵 PINGPONG DELAY created:`, typeof result, result)
+    case 'delay':
+      console.log(`🎵 CREATING DELAY EFFECT`)
+      result = createDelay(context, params)
+      console.log(`🎵 DELAY created:`, typeof result, result)
       return result
 
     case 'vibrato':
@@ -1908,21 +1895,19 @@ function updateEffectParams(effectId, params) {
       }
       break
 
-    case 'pingpongdelay':
+    case 'delay':
       // Update wet/dry mix in real-time
       if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
         currentEffect.input._wetGain.gain.value = liveParams.wet
         currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
       }
       // Update delay time in real-time
-      if (params.delayTime !== undefined && currentEffect.input._delayL && currentEffect.input._delayR) {
-        currentEffect.input._delayL.delayTime.value = liveParams.delayTime
-        currentEffect.input._delayR.delayTime.value = liveParams.delayTime
+      if (params.delayTime !== undefined && currentEffect.input._delayNode) {
+        currentEffect.input._delayNode.delayTime.value = liveParams.delayTime
       }
       // Update feedback in real-time
-      if (params.feedback !== undefined && currentEffect.input._feedbackL && currentEffect.input._feedbackR) {
-        currentEffect.input._feedbackL.gain.value = liveParams.feedback
-        currentEffect.input._feedbackR.gain.value = liveParams.feedback
+      if (params.feedback !== undefined && currentEffect.input._feedbackGain) {
+        currentEffect.input._feedbackGain.gain.value = liveParams.feedback
       }
       break
 
@@ -2189,19 +2174,17 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       break
 
-    case 'pingpongdelay':
+    case 'delay':
       // Update wet/dry mix, delay time, and feedback in real-time with smooth transitions
       if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
         smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
-      if (params.delayTime !== undefined && state.currentEffect.input._delayL && state.currentEffect.input._delayR) {
-        smoothParamChange(state.currentEffect.input._delayL.delayTime, state.liveParams.delayTime, 0.05, 'linear')
-        smoothParamChange(state.currentEffect.input._delayR.delayTime, state.liveParams.delayTime, 0.05, 'linear')
+      if (params.delayTime !== undefined && state.currentEffect.input._delayNode) {
+        smoothParamChange(state.currentEffect.input._delayNode.delayTime, state.liveParams.delayTime, 0.05, 'linear')
       }
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackL && state.currentEffect.input._feedbackR) {
-        smoothParamChange(state.currentEffect.input._feedbackL.gain, state.liveParams.feedback, 0.015)
-        smoothParamChange(state.currentEffect.input._feedbackR.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
+        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
       }
       break
 

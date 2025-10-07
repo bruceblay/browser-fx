@@ -5,7 +5,7 @@ import { distortionConfig } from './distortion'
 import { chorusConfig } from './chorus'
 import { phaserConfig } from './phaser'
 import { tremoloConfig } from './tremolo'
-import { pingPongDelayConfig } from './pingpongdelay'
+import { delayConfig } from './delay'
 import { vibratoConfig } from './vibrato'
 import { autoFilterConfig } from './autofilter'
 import { pitchShifterConfig } from './pitchshifter'
@@ -28,7 +28,7 @@ export const EFFECTS: Record<string, EffectConfig> = {
   [simpleFilterConfig.id]: simpleFilterConfig,
   [vibratoConfig.id]: vibratoConfig,
   [combFilterConfig.id]: combFilterConfig,
-  [pingPongDelayConfig.id]: pingPongDelayConfig,
+  [delayConfig.id]: delayConfig,
   [djEQConfig.id]: djEQConfig,
   [autoPannerConfig.id]: autoPannerConfig,
   [hallReverbConfig.id]: hallReverbConfig,
@@ -72,7 +72,7 @@ export {
   simpleFilterConfig,
   vibratoConfig,
   combFilterConfig,
-  pingPongDelayConfig,
+  delayConfig,
   djEQConfig,
   autoPannerConfig,
   hallReverbConfig,

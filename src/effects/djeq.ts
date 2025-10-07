@@ -6,8 +6,8 @@ export const djEQConfig: EffectConfig = {
   description: '3-band equalizer for quick tonal shaping',
   parameters: [
     {
-      key: 'highGain',
-      label: 'High',
+      key: 'lowGain',
+      label: 'Low',
       min: -15,
       max: 15,
       step: 0.5,
@@ -24,8 +24,8 @@ export const djEQConfig: EffectConfig = {
       unit: 'dB'
     },
     {
-      key: 'lowGain',
-      label: 'Low',
+      key: 'highGain',
+      label: 'High',
       min: -15,
       max: 15,
       step: 0.5,
