@@ -1475,6 +1475,414 @@ function createCombFilter(context, params, tabLiveParams) {
   return { input: inputGain, output: outputGain }
 }
 
+// Tape Stop Effect Implementation
+function createTapeStop(context, params, tabLiveParams) {
+  console.log('🎵 TAPESTOP: Creating tape stop effect')
+
+  // Initialize live params
+  tabLiveParams.stopTime = params.stopTime || 1.0
+  tabLiveParams.restartTime = params.restartTime || 0.5
+  tabLiveParams.mode = params.mode !== undefined ? params.mode : 2
+  tabLiveParams.wet = params.wet !== undefined ? params.wet : 1.0
+
+  const scriptProcessor = context.createScriptProcessor(4096, 2, 2)
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Circular buffer for tape stop (2 seconds at sample rate, stereo)
+  const bufferLength = context.sampleRate * 2
+  const bufferL = new Float32Array(bufferLength)
+  const bufferR = new Float32Array(bufferLength)
+  let writeIndex = 0
+
+  // Playback state
+  let readPosition = 0.0  // Fractional read position for variable-speed playback
+  let playbackRate = 1.0   // Current playback rate (1.0 = normal, 0.0 = stopped)
+  let phase = 'stopping'   // 'stopping', 'stopped', 'restarting', 'playing'
+  let phaseTimer = 0        // Samples elapsed in current phase
+  let phaseDuration = 0     // Total samples for current phase
+
+  // Start in the stopping phase
+  function startStop() {
+    phase = 'stopping'
+    phaseTimer = 0
+    phaseDuration = Math.floor(tabLiveParams.stopTime * context.sampleRate)
+    playbackRate = 1.0
+  }
+
+  function startRestart() {
+    phase = 'restarting'
+    phaseTimer = 0
+    phaseDuration = Math.floor(tabLiveParams.restartTime * context.sampleRate)
+    playbackRate = 0.0
+  }
+
+  function startPlaying() {
+    phase = 'playing'
+    phaseTimer = 0
+    // In continuous mode (2), hold at normal speed briefly before stopping again
+    phaseDuration = Math.floor(0.5 * context.sampleRate) // 0.5s at normal speed
+    playbackRate = 1.0
+  }
+
+  // Begin the cycle
+  startStop()
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  scriptProcessor.onaudioprocess = function(e) {
+    const inL = e.inputBuffer.getChannelData(0)
+    const inR = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : inL
+    const outL = e.outputBuffer.getChannelData(0)
+    const outR = e.outputBuffer.getChannelData(1)
+
+    // Refresh durations from live params each block
+    const stopSamples = Math.floor(tabLiveParams.stopTime * context.sampleRate)
+    const restartSamples = Math.floor(tabLiveParams.restartTime * context.sampleRate)
+    const mode = Math.floor(tabLiveParams.mode)
+
+    for (let i = 0; i < inL.length; i++) {
+      // Always write incoming audio to circular buffer
+      bufferL[writeIndex] = inL[i]
+      bufferR[writeIndex] = inR[i]
+      writeIndex = (writeIndex + 1) % bufferLength
+
+      // Update phase and playback rate
+      phaseTimer++
+
+      if (phase === 'stopping') {
+        // Exponential slowdown: rate goes from 1.0 to ~0.0
+        const progress = Math.min(phaseTimer / stopSamples, 1.0)
+        // Use exponential curve for natural vinyl feel
+        playbackRate = Math.max(0, 1.0 - Math.pow(progress, 1.5))
+
+        if (progress >= 1.0) {
+          playbackRate = 0.0
+          if (mode === 0) {
+            // Stop only: stay stopped
+            phase = 'stopped'
+          } else {
+            // Mode 1 or 2: restart after stopping
+            startRestart()
+          }
+        }
+      } else if (phase === 'restarting') {
+        // Exponential speed-up: rate goes from 0.0 to 1.0
+        const progress = Math.min(phaseTimer / restartSamples, 1.0)
+        playbackRate = Math.pow(progress, 1.5)
+
+        if (progress >= 1.0) {
+          playbackRate = 1.0
+          if (mode === 2) {
+            // Continuous: play briefly then stop again
+            startPlaying()
+          } else {
+            // Mode 1: stop + restart once, then stay playing
+            phase = 'playing'
+            phaseDuration = Infinity
+          }
+        }
+      } else if (phase === 'playing' && mode === 2) {
+        // In continuous mode, after playing period, stop again
+        if (phaseTimer >= phaseDuration) {
+          startStop()
+        }
+      }
+      // 'stopped' phase: playbackRate stays at 0
+
+      // Read from circular buffer at variable rate
+      if (playbackRate > 0.001) {
+        // Advance read position by playback rate
+        readPosition = (readPosition + playbackRate) % bufferLength
+
+        // Linear interpolation for smooth playback
+        const idx = Math.floor(readPosition)
+        const frac = readPosition - idx
+        const nextIdx = (idx + 1) % bufferLength
+
+        outL[i] = bufferL[idx] * (1 - frac) + bufferL[nextIdx] * frac
+        outR[i] = bufferR[idx] * (1 - frac) + bufferR[nextIdx] * frac
+      } else {
+        // Stopped: silence
+        outL[i] = 0
+        outR[i] = 0
+      }
+    }
+  }
+
+  // Connect the processing chain
+  inputGain.connect(scriptProcessor)
+  inputGain.connect(dryGain)
+  scriptProcessor.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._scriptProcessor = scriptProcessor
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  // Store a restart function so mode changes can reset the cycle
+  inputGain._resetCycle = function() {
+    startStop()
+  }
+
+  console.log(`🎵 TAPESTOP: Created with stopTime=${tabLiveParams.stopTime}s, restartTime=${tabLiveParams.restartTime}s, mode=${tabLiveParams.mode}`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Sidechain Pump Effect Implementation
+// Envelope-following approach: detects kick/low-end energy and ducks the signal
+function createSidechainPump(context, params, tabLiveParams) {
+  console.log('🎵 SIDECHAINPUMP: Creating sidechain pump effect (envelope follower)')
+
+  // Initialize live params
+  tabLiveParams.filterFreq = params.filterFreq || 100
+  tabLiveParams.sensitivity = params.sensitivity !== undefined ? params.sensitivity : 0.1
+  tabLiveParams.depth = params.depth !== undefined ? params.depth : 0.8
+  tabLiveParams.attack = params.attack || 0.005
+  tabLiveParams.release = params.release || 0.25
+  tabLiveParams.wet = params.wet !== undefined ? params.wet : 1.0
+
+  const scriptProcessor = context.createScriptProcessor(4096, 2, 2)
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Low-pass filter for kick detection (runs inside ScriptProcessor manually)
+  // We'll implement a simple 2-pole lowpass in the audio callback
+  let filterState1L = 0, filterState2L = 0
+  let filterState1R = 0, filterState2R = 0
+
+  // Envelope follower state
+  let envelope = 0.0      // Current detected envelope level
+  let duckGain = 1.0      // Current gain applied to signal (1.0 = full, 0.0 = silent)
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  scriptProcessor.onaudioprocess = function(e) {
+    const inL = e.inputBuffer.getChannelData(0)
+    const inR = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : inL
+    const outL = e.outputBuffer.getChannelData(0)
+    const outR = e.outputBuffer.getChannelData(1)
+
+    const sampleRate = context.sampleRate
+    const filterFreq = tabLiveParams.filterFreq
+    const sensitivity = tabLiveParams.sensitivity
+    const depth = tabLiveParams.depth
+    const attack = tabLiveParams.attack
+    const release = tabLiveParams.release
+
+    // Calculate lowpass filter coefficient (simple 1-pole per stage, 2 stages = 2-pole)
+    // fc = filterFreq, coefficient = e^(-2*pi*fc/sr)
+    const filterCoeff = Math.exp(-2.0 * Math.PI * filterFreq / sampleRate)
+
+    // Envelope follower time constants (in samples)
+    // Attack: how fast envelope rises when kick hits
+    const envAttack = Math.exp(-1.0 / (attack * sampleRate))
+    // Release: how fast envelope falls after kick
+    const envRelease = Math.exp(-1.0 / (release * sampleRate))
+
+    // Gain smoothing to avoid clicks (fast but not instant)
+    const gainAttack = Math.exp(-1.0 / (0.001 * sampleRate))  // 1ms duck
+    const gainRelease = Math.exp(-1.0 / (release * sampleRate)) // match release
+
+    for (let i = 0; i < inL.length; i++) {
+      // Mix input to mono for detection
+      const monoIn = (inL[i] + inR[i]) * 0.5
+
+      // 2-pole lowpass filter to isolate kick/bass
+      filterState1L = filterState1L * filterCoeff + monoIn * (1 - filterCoeff)
+      filterState2L = filterState2L * filterCoeff + filterState1L * (1 - filterCoeff)
+      const lowSignal = filterState2L
+
+      // Rectify (absolute value) for envelope detection
+      const rectified = Math.abs(lowSignal)
+
+      // Envelope follower: fast attack, slow release
+      if (rectified > envelope) {
+        envelope = envAttack * envelope + (1 - envAttack) * rectified
+      } else {
+        envelope = envRelease * envelope + (1 - envRelease) * rectified
+      }
+
+      // Calculate target gain based on envelope vs sensitivity threshold
+      // When envelope exceeds sensitivity, duck the signal
+      let targetGain = 1.0
+      if (envelope > sensitivity) {
+        // How much over threshold (normalized)
+        const overThreshold = Math.min((envelope - sensitivity) / sensitivity, 1.0)
+        // Duck proportionally, scaled by depth
+        targetGain = 1.0 - (depth * overThreshold)
+      }
+
+      // Smooth the gain to avoid clicks
+      if (targetGain < duckGain) {
+        duckGain = gainAttack * duckGain + (1 - gainAttack) * targetGain
+      } else {
+        duckGain = gainRelease * duckGain + (1 - gainRelease) * targetGain
+      }
+
+      // Apply gain ducking
+      outL[i] = inL[i] * duckGain
+      outR[i] = inR[i] * duckGain
+    }
+  }
+
+  // Connect the processing chain
+  inputGain.connect(scriptProcessor)
+  inputGain.connect(dryGain)
+  scriptProcessor.connect(wetGain)
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._scriptProcessor = scriptProcessor
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+
+  console.log(`🎵 SIDECHAINPUMP: Created with filterFreq=${tabLiveParams.filterFreq}Hz, sensitivity=${tabLiveParams.sensitivity}, depth=${tabLiveParams.depth}, attack=${tabLiveParams.attack}s, release=${tabLiveParams.release}s`)
+
+  return { input: inputGain, output: outputGain }
+}
+
+// Lo-Fi Tape Effect Implementation
+function createLofiTape(context, params, tabLiveParams) {
+  console.log('🎵 LOFITAPE: Creating lo-fi tape effect')
+
+  // Initialize live params
+  tabLiveParams.wowDepth = params.wowDepth !== undefined ? params.wowDepth : 0.3
+  tabLiveParams.flutterRate = params.flutterRate || 6.0
+  tabLiveParams.saturation = params.saturation !== undefined ? params.saturation : 0.4
+  tabLiveParams.toneRolloff = params.toneRolloff || 6000
+  tabLiveParams.noise = params.noise !== undefined ? params.noise : 0.1
+  tabLiveParams.wet = params.wet !== undefined ? params.wet : 0.8
+
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+
+  // === WOW + FLUTTER: Delay line modulated by two LFOs ===
+  // Wow = slow pitch drift, Flutter = fast pitch jitter
+  const delayNode = context.createDelay(0.1) // max 100ms
+  delayNode.delayTime.value = 0.01 // 10ms base delay
+
+  // Wow LFO (slow: ~0.4 Hz)
+  const wowLfo = context.createOscillator()
+  wowLfo.type = 'sine'
+  wowLfo.frequency.value = 0.4
+  const wowGain = context.createGain()
+  wowGain.gain.value = tabLiveParams.wowDepth * 0.003 // subtle delay modulation
+
+  // Flutter LFO (faster, based on param)
+  const flutterLfo = context.createOscillator()
+  flutterLfo.type = 'sine'
+  flutterLfo.frequency.value = tabLiveParams.flutterRate
+  const flutterGain = context.createGain()
+  flutterGain.gain.value = tabLiveParams.wowDepth * 0.0008 // very subtle
+
+  // Connect LFOs to delay modulation
+  wowLfo.connect(wowGain)
+  wowGain.connect(delayNode.delayTime)
+  flutterLfo.connect(flutterGain)
+  flutterGain.connect(delayNode.delayTime)
+  wowLfo.start()
+  flutterLfo.start()
+
+  // === SATURATION: Soft tanh waveshaper ===
+  const waveshaper = context.createWaveShaper()
+  const curveLength = 44100
+  const curve = new Float32Array(curveLength)
+  function updateSaturationCurve() {
+    const drive = 1 + tabLiveParams.saturation * 4 // 1x to 5x drive
+    for (let i = 0; i < curveLength; i++) {
+      const x = (i * 2) / curveLength - 1
+      curve[i] = Math.tanh(x * drive)
+    }
+    waveshaper.curve = curve
+  }
+  updateSaturationCurve()
+  waveshaper.oversample = '2x'
+
+  // === TONE ROLLOFF: Lowpass filter ===
+  const toneFilter = context.createBiquadFilter()
+  toneFilter.type = 'lowpass'
+  toneFilter.frequency.value = tabLiveParams.toneRolloff
+  toneFilter.Q.value = 0.7 // gentle rolloff, no resonance
+
+  // === TAPE HISS: White noise source ===
+  // Create a noise buffer (2 seconds of white noise)
+  const noiseLength = 2 * context.sampleRate
+  const noiseBuffer = context.createBuffer(1, noiseLength, context.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < noiseLength; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+
+  const noiseSource = context.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  noiseSource.loop = true
+
+  // Shape the noise to sound more like tape hiss (high-pass + bandpass)
+  const noiseHPF = context.createBiquadFilter()
+  noiseHPF.type = 'highpass'
+  noiseHPF.frequency.value = 2000
+  noiseHPF.Q.value = 0.5
+
+  const noiseGainNode = context.createGain()
+  noiseGainNode.gain.value = tabLiveParams.noise * 0.05 // keep it subtle
+
+  noiseSource.connect(noiseHPF)
+  noiseHPF.connect(noiseGainNode)
+  noiseSource.start()
+
+  // === SIGNAL CHAIN ===
+  // input → delay (wow/flutter) → waveshaper (saturation) → lowpass (tone) → wet mix
+  // noise also feeds into wet mix
+  inputGain.connect(delayNode)
+  delayNode.connect(waveshaper)
+  waveshaper.connect(toneFilter)
+  toneFilter.connect(wetGain)
+  noiseGainNode.connect(wetGain)
+
+  // Dry path
+  inputGain.connect(dryGain)
+
+  // Set up wet/dry mix
+  wetGain.gain.value = tabLiveParams.wet
+  dryGain.gain.value = 1 - tabLiveParams.wet
+
+  wetGain.connect(outputGain)
+  dryGain.connect(outputGain)
+
+  // Store references for parameter updates
+  inputGain._wetGain = wetGain
+  inputGain._dryGain = dryGain
+  inputGain._wowLfo = wowLfo
+  inputGain._flutterLfo = flutterLfo
+  inputGain._wowGain = wowGain
+  inputGain._flutterGain = flutterGain
+  inputGain._toneFilter = toneFilter
+  inputGain._noiseGain = noiseGainNode
+  inputGain._noiseSource = noiseSource
+  inputGain._updateSaturationCurve = updateSaturationCurve
+
+  console.log(`🎵 LOFITAPE: Created with wow=${tabLiveParams.wowDepth}, flutter=${tabLiveParams.flutterRate}Hz, sat=${tabLiveParams.saturation}, tone=${tabLiveParams.toneRolloff}Hz, noise=${tabLiveParams.noise}`)
+
+  return { input: inputGain, output: outputGain }
+}
+
 // Create effect based on ID and parameters
 function createEffect(effectId, params, tabLiveParams) {
   const context = audioContext
@@ -1598,6 +2006,24 @@ function createEffect(effectId, params, tabLiveParams) {
       console.log(`🎵 CREATING HALL REVERB EFFECT`)
       result = createHallReverb(context, params, tabLiveParams)
       console.log(`🎵 HALL REVERB created:`, typeof result, result)
+      return result
+
+    case 'tapestop':
+      console.log(`🎵 CREATING TAPE STOP EFFECT`)
+      result = createTapeStop(context, params, tabLiveParams)
+      console.log(`🎵 TAPE STOP created:`, typeof result, result)
+      return result
+
+    case 'sidechainpump':
+      console.log(`🎵 CREATING SIDECHAIN PUMP EFFECT`)
+      result = createSidechainPump(context, params, tabLiveParams)
+      console.log(`🎵 SIDECHAIN PUMP created:`, typeof result, result)
+      return result
+
+    case 'lofitape':
+      console.log(`🎵 CREATING LO-FI TAPE EFFECT`)
+      result = createLofiTape(context, params, tabLiveParams)
+      console.log(`🎵 LO-FI TAPE created:`, typeof result, result)
       return result
 
     default:
@@ -1944,6 +2370,51 @@ function updateEffectParams(effectId, params) {
       }
       break
 
+    case 'tapestop':
+      // Tape stop params are read from tabLiveParams in the audio callback
+      // Wet/dry mix can be updated in real-time
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      // Mode change resets the cycle
+      if (params.mode !== undefined && currentEffect.input._resetCycle) {
+        currentEffect.input._resetCycle()
+      }
+      break
+
+    case 'sidechainpump':
+      // Sidechain pump params are read from liveParams in the audio callback
+      // Wet/dry mix can be updated in real-time
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      break
+
+    case 'lofitape':
+      if (params.wet !== undefined && currentEffect.input._wetGain && currentEffect.input._dryGain) {
+        currentEffect.input._wetGain.gain.value = liveParams.wet
+        currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
+      }
+      if (params.wowDepth !== undefined) {
+        if (currentEffect.input._wowGain) currentEffect.input._wowGain.gain.value = liveParams.wowDepth * 0.003
+        if (currentEffect.input._flutterGain) currentEffect.input._flutterGain.gain.value = liveParams.wowDepth * 0.0008
+      }
+      if (params.flutterRate !== undefined && currentEffect.input._flutterLfo) {
+        currentEffect.input._flutterLfo.frequency.value = liveParams.flutterRate
+      }
+      if (params.saturation !== undefined && currentEffect.input._updateSaturationCurve) {
+        currentEffect.input._updateSaturationCurve()
+      }
+      if (params.toneRolloff !== undefined && currentEffect.input._toneFilter) {
+        currentEffect.input._toneFilter.frequency.value = liveParams.toneRolloff
+      }
+      if (params.noise !== undefined && currentEffect.input._noiseGain) {
+        currentEffect.input._noiseGain.gain.value = liveParams.noise * 0.05
+      }
+      break
+
     default:
       console.warn(`🎵 Unknown effect for parameter update: ${currentEffectId}`)
   }
@@ -2252,6 +2723,51 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       if (params.pitch !== undefined || params.delayTime !== undefined) {
         console.log(`🎵 Recreating pitch shifter for tab ${tabId} for parameter change`)
         switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      }
+      break
+
+    case 'tapestop':
+      // Tape stop params are read from liveParams in the audio callback
+      // Wet/dry mix can be updated in real-time
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      // Mode change resets the cycle
+      if (params.mode !== undefined && state.currentEffect.input._resetCycle) {
+        state.currentEffect.input._resetCycle()
+      }
+      break
+
+    case 'sidechainpump':
+      // Sidechain pump params are read from liveParams in the audio callback
+      // Wet/dry mix can be updated in real-time
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      break
+
+    case 'lofitape':
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      }
+      if (params.wowDepth !== undefined) {
+        if (state.currentEffect.input._wowGain) smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.003, 0.02)
+        if (state.currentEffect.input._flutterGain) smoothParamChange(state.currentEffect.input._flutterGain.gain, state.liveParams.wowDepth * 0.0008, 0.02)
+      }
+      if (params.flutterRate !== undefined && state.currentEffect.input._flutterLfo) {
+        smoothParamChange(state.currentEffect.input._flutterLfo.frequency, state.liveParams.flutterRate, 0.02)
+      }
+      if (params.saturation !== undefined && state.currentEffect.input._updateSaturationCurve) {
+        state.currentEffect.input._updateSaturationCurve()
+      }
+      if (params.toneRolloff !== undefined && state.currentEffect.input._toneFilter) {
+        smoothParamChange(state.currentEffect.input._toneFilter.frequency, state.liveParams.toneRolloff, 0.025)
+      }
+      if (params.noise !== undefined && state.currentEffect.input._noiseGain) {
+        smoothParamChange(state.currentEffect.input._noiseGain.gain, state.liveParams.noise * 0.05, 0.015)
       }
       break
 

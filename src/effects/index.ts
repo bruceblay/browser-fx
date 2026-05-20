@@ -19,6 +19,9 @@ import { loopChopConfig } from './loopchop'
 import { ringModulatorConfig } from './ringmodulator'
 import { simpleFilterConfig } from './simplefilter'
 import { tapTempoDelayConfig } from './taptempodelay'
+import { tapeStopConfig } from './tapestop'
+import { sidechainPumpConfig } from './sidechainpump'
+import { lofiTapeConfig } from './lofitape'
 
 // Registry of all available effects
 export const EFFECTS: Record<string, EffectConfig> = {
@@ -42,6 +45,9 @@ export const EFFECTS: Record<string, EffectConfig> = {
   [flangerConfig.id]: flangerConfig,
   [ringModulatorConfig.id]: ringModulatorConfig,
   [tapTempoDelayConfig.id]: tapTempoDelayConfig,
+  [tapeStopConfig.id]: tapeStopConfig,
+  [sidechainPumpConfig.id]: sidechainPumpConfig,
+  [lofiTapeConfig.id]: lofiTapeConfig,
 }
 
 // Get list of effects for dropdown
@@ -85,5 +91,8 @@ export {
   compressorConfig,
   flangerConfig,
   ringModulatorConfig,
-  tapTempoDelayConfig
+  tapTempoDelayConfig,
+  tapeStopConfig,
+  sidechainPumpConfig,
+  lofiTapeConfig
 }

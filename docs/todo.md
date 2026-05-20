@@ -1,3 +1,6 @@
-- add tone.js versions of each effect and a/b compare each one
-- refine the design.  it looks very bland and uninspiring
-- 
+- code review.  look for anti patterns
+- sampler/looper
+- unit testing
+- design could use another pass
+- add new effects to effects list
+- light mode?
