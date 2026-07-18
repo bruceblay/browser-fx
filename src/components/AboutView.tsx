@@ -75,7 +75,7 @@ export function AboutView({ onBack, isCapturing, tabId, accentColor }: AboutView
           isCapturing={isCapturing}
           accentColor={accentColor}
           tabId={tabId}
-          intensity={0.45}
+          intensity={1.2}
         />
         <div style={{
           position: 'relative',
