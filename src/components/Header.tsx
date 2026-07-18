@@ -3,6 +3,8 @@ import { theme } from "../theme"
 interface HeaderProps {
   onInfoClick: () => void
   onClearClick: () => void
+  onMidiClick: () => void
+  midiLearnActive: boolean
   isCapturing: boolean
   onPowerToggle: () => void
 }
@@ -35,7 +37,7 @@ const dim = (e: React.MouseEvent<HTMLButtonElement>) => {
   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'
 }
 
-export function Header({ onInfoClick, onClearClick, isCapturing, onPowerToggle }: HeaderProps) {
+export function Header({ onInfoClick, onClearClick, onMidiClick, midiLearnActive, isCapturing, onPowerToggle }: HeaderProps) {
   return (
     <div style={{
       display: 'flex',
@@ -75,6 +77,24 @@ export function Header({ onInfoClick, onClearClick, isCapturing, onPowerToggle }
       }}>
         Browser FX
       </span>
+
+      <button
+        onClick={onMidiClick}
+        title={midiLearnActive ? "Exit MIDI learn mode" : "Map knobs to a MIDI controller"}
+        style={{
+          ...iconButtonStyle,
+          fontSize: 10,
+          ...(midiLearnActive ? {
+            color: theme.led,
+            borderColor: theme.led,
+            boxShadow: `0 0 5px ${theme.ledGlow}`
+          } : {})
+        }}
+        onMouseOver={(e) => { if (!midiLearnActive) brighten(e) }}
+        onMouseOut={(e) => { if (!midiLearnActive) dim(e) }}
+      >
+        M
+      </button>
 
       <button
         onClick={onClearClick}

@@ -7,6 +7,12 @@ interface EffectControlsProps {
   effectParams: Record<string, number>
   isCapturing: boolean
   startFailed: boolean
+  midiLearn: boolean
+  midiLearnTarget: number | null
+  midiMappings: Record<string, number>
+  midiStatus: string
+  onArmKnob: (index: number) => void
+  onMidiReset: () => void
   onParamUpdate: (param: string, value: number) => void
   onStart: () => void
 }
@@ -55,6 +61,12 @@ export function EffectControls({
   effectParams,
   isCapturing,
   startFailed,
+  midiLearn,
+  midiLearnTarget,
+  midiMappings,
+  midiStatus,
+  onArmKnob,
+  onMidiReset,
   onParamUpdate,
   onStart
 }: EffectControlsProps) {
@@ -81,17 +93,20 @@ export function EffectControls({
         gap: '14px 10px',
         justifyContent: 'space-evenly'
       }}>
-        {effectConfig.parameters.map((param) => {
+        {effectConfig.parameters.map((param, paramIndex) => {
           const currentValue = effectParams[param.key] ?? param.default
           const value01 = mapTo01(currentValue, param.min, param.max)
           const valueAngle = ANGLE_MIN + value01 * (ANGLE_MAX - ANGLE_MIN)
+          const armed = midiLearn && midiLearnTarget === paramIndex
+          const mappedCc = Object.keys(midiMappings).find(cc => midiMappings[cc] === paramIndex)
 
           return (
             <div key={param.key} style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              minWidth: 76
+              minWidth: 76,
+              position: 'relative'
             }}>
               <KnobHeadless
                 aria-label={param.label}
@@ -182,6 +197,28 @@ export function EffectControls({
                 </div>
               </KnobHeadless>
 
+              {/* MIDI learn overlay: click to arm this knob for the next CC */}
+              {midiLearn && (
+                <div
+                  onClick={() => onArmKnob(paramIndex)}
+                  title="Click, then move a control on your MIDI device"
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: KNOB_SIZE + 8,
+                    height: KNOB_SIZE + 8,
+                    borderRadius: '50%',
+                    border: `1.5px ${armed ? 'solid' : 'dashed'} ${theme.led}`,
+                    boxShadow: armed ? `0 0 8px ${theme.ledGlow}` : 'none',
+                    cursor: 'pointer',
+                    zIndex: 2,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              )}
+
               <label style={{
                 marginTop: 5,
                 fontSize: 11,
@@ -194,6 +231,18 @@ export function EffectControls({
               }}>
                 {param.label}
               </label>
+
+              {midiLearn && mappedCc !== undefined && (
+                <span style={{
+                  marginTop: 2,
+                  fontSize: 9,
+                  color: theme.led,
+                  letterSpacing: '0.4px',
+                  userSelect: 'none'
+                }}>
+                  cc {mappedCc}
+                </span>
+              )}
             </div>
           )
         })}
@@ -206,7 +255,52 @@ export function EffectControls({
         alignItems: 'center',
         justifyContent: 'center'
       }}>
-        {!isCapturing && (
+        {midiLearn ? (
+          <span style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 3,
+            fontSize: 10,
+            color: theme.led,
+            textTransform: 'lowercase',
+            letterSpacing: '0.3px',
+            userSelect: 'none'
+          }}>
+            <span>
+              {midiLearnTarget === null
+                ? 'click a knob, then move a control on your midi device'
+                : 'now move a control on your midi device...'}
+            </span>
+            {/* Live engine status while capturing, for troubleshooting */}
+            {midiStatus && (
+              <span style={{ color: theme.textFaint, fontSize: 9 }}>
+                midi: {midiStatus}
+              </span>
+            )}
+            <button
+              onClick={onMidiReset}
+              title="Clear all MIDI mappings and open the setup page"
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: '2px 6px',
+                fontFamily: 'inherit',
+                fontSize: 9,
+                color: theme.textFaint,
+                textTransform: 'lowercase',
+                letterSpacing: '0.3px',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.color = theme.textDim }}
+              onMouseOut={(e) => { e.currentTarget.style.color = theme.textFaint }}
+            >
+              reset midi + open setup
+            </button>
+          </span>
+        ) : !isCapturing && (
           <button
             onClick={onStart}
             title="Start audio capture"

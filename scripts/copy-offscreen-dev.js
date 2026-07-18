@@ -32,7 +32,9 @@ function copyDirSync(src, dest) {
 // Copy offscreen files to DEV build directory
 const sourceFiles = [
   'offscreen.html',
-  'offscreen-effects.js'
+  'offscreen-effects.js',
+  'midi-setup.html',
+  'midi-setup.js'
 ]
 
 // No external dependencies to copy

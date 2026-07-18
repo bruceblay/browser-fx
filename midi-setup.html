@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Browser FX MIDI Setup</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0d0d0d;
+      color: #d6d6d6;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 60px 20px;
+    }
+    .panel {
+      width: 420px;
+      background: #1e1e1e;
+      border: 1px solid #0a0a0a;
+      border-radius: 5px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+    .titlebar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      background: linear-gradient(#424242, #353535);
+      border-bottom: 1px solid #0a0a0a;
+      font-size: 13px;
+      font-weight: 700;
+      color: #ececec;
+    }
+    .content { padding: 18px 16px; font-size: 13px; line-height: 1.6; }
+    .content p { margin: 0 0 12px 0; color: #9a9a9a; }
+    button {
+      padding: 8px 20px;
+      border-radius: 3px;
+      border: 1px solid #111;
+      background: #282828;
+      color: #44d962;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    button:hover { background: #303030; }
+    #status { display: none; margin-top: 14px; font-size: 12px; color: #9a9a9a; white-space: pre-line; }
+    #status.visible { display: block; }
+    #status.ok { color: #44d962; }
+    #status.err { color: #e0796a; }
+    #activity { display: none; margin-top: 10px; font-size: 11px; color: #6c6c6c; }
+    #activity.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="titlebar">Browser FX MIDI Setup</div>
+    <div class="content">
+      <p>Grant MIDI access once and your controller will work everywhere in Browser FX, including while the popup is closed. Chrome will ask for permission when you click the button.</p>
+      <button id="enable">enable midi access</button>
+      <div id="status"></div>
+      <div id="activity"></div>
+    </div>
+  </div>
+  <script src="midi-setup.js"></script>
+</body>
+</html>

@@ -41,7 +41,7 @@ function forwardWithActiveTab(message: Record<string, unknown>) {
   })
 }
 
-async function startCapture(message: { effectId: string; params: Record<string, number> }) {
+async function startCapture(message: { effectId: string; params: Record<string, number>; paramSpecs?: unknown }) {
   console.log("Processing START_CAPTURE request")
 
   // Parallelize offscreen creation and tab query for speed
@@ -95,6 +95,7 @@ async function startCapture(message: { effectId: string; params: Record<string, 
       streamId: streamId,
       effectId: message.effectId,
       params: message.params,
+      paramSpecs: message.paramSpecs,
       tabId: activeTab.id
     })
   } catch (error) {
@@ -114,13 +115,33 @@ async function startCapture(message: { effectId: string; params: Record<string, 
   console.log("Message sent to offscreen document successfully")
 }
 
+// Push MIDI mapping changes to the offscreen document, which can't observe
+// chrome.storage itself
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.midiMappings) {
+    sendToOffscreen({
+      type: 'MIDI_MAPPINGS_UPDATED',
+      mappings: changes.midiMappings.newValue || {}
+    })
+  }
+})
+
 // Handle messages from popup. This listener must stay synchronous: an async
 // listener returns a Promise instead of the literal `true` Chrome needs to
 // keep the response port open, which makes responses flaky.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Visualizer polling is popup-to-offscreen traffic at 20Hz; stay out of it
-  if (message.type === "GET_VISUALIZER_FRAME") {
+  // Popup-to-offscreen traffic; stay out of it
+  if (message.type === "GET_VISUALIZER_FRAME" || message.type === "GET_TAB_STATUS") {
     return
+  }
+
+  // The offscreen document can't read chrome.storage, so it asks us for the
+  // MIDI mappings at startup
+  if (message.type === "GET_MIDI_MAPPINGS") {
+    chrome.storage.local.get(['midiMappings']).then((result) => {
+      sendResponse({ mappings: result.midiMappings || {} })
+    })
+    return true // response is sent asynchronously, keep the port open
   }
 
   console.log("Background received message:", message)
@@ -165,7 +186,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     forwardWithActiveTab({
       type: "SWITCH_EFFECT",
       effectId: message.effectId,
-      params: message.params
+      params: message.params,
+      paramSpecs: message.paramSpecs
     })
     sendResponse({ success: true, message: "Effect switched" })
     return

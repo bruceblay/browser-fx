@@ -4,6 +4,11 @@ interface VisualizerProps {
   isCapturing: boolean
   accentColor: string
   tabId: number | null
+  onFrame?: (
+    effectId: string | null,
+    params: Record<string, number> | null,
+    midi: { status: string; lastEvent: string } | null
+  ) => void
 }
 
 const BAND_COUNT = 16
@@ -20,13 +25,15 @@ const hexToRgb = (hex: string) => {
 // the effect's accent color. Bass and treble drive the plate modes so the
 // ridges sweep and reorganize with the audio. Falls back to a gentle
 // time-driven morph when idle or when no analyser data is available.
-export function Visualizer({ isCapturing, accentColor, tabId }: VisualizerProps) {
+export function Visualizer({ isCapturing, accentColor, tabId, onFrame }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const bandsRef = useRef<number[] | null>(null)
   const accentRef = useRef(accentColor)
   const capturingRef = useRef(isCapturing)
+  const onFrameRef = useRef(onFrame)
   accentRef.current = accentColor
   capturingRef.current = isCapturing
+  onFrameRef.current = onFrame
 
   // Poll the offscreen document's analyser while capturing. Uses the same
   // broadcast message path as the rest of the extension, which the offscreen
@@ -44,6 +51,9 @@ export function Visualizer({ isCapturing, accentColor, tabId }: VisualizerProps)
           const err = chrome.runtime.lastError
           if (!cancelled) {
             bandsRef.current = !err && response?.bands ? response.bands : null
+            if (!err && response) {
+              onFrameRef.current?.(response.effectId ?? null, response.params ?? null, response.midi ?? null)
+            }
           }
         })
       } catch {

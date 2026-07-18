@@ -117,6 +117,10 @@ function cleanupTabState(tabId) {
   const state = tabAudioState.get(tabId)
   if (!state) return
 
+  if (state._rebuildTimer) {
+    clearTimeout(state._rebuildTimer)
+    state._rebuildTimer = null
+  }
   if (state.sourceNode) {
     state.sourceNode.disconnect()
   }
@@ -2195,6 +2199,19 @@ function switchEffectForTab(effectId, params, tabId) {
   state.currentEffectParams = params
 }
 
+// Rebuild-class parameters (impulse responses, buffer sizes) can't update
+// live. Debounce the rebuild so a MIDI sweep rebuilds once at rest instead
+// of dozens of times per second.
+function scheduleEffectRebuild(effectId, tabId) {
+  const state = getTabState(tabId)
+  if (state._rebuildTimer) clearTimeout(state._rebuildTimer)
+  state._rebuildTimer = setTimeout(() => {
+    state._rebuildTimer = null
+    if (!tabAudioState.has(tabId)) return
+    switchEffectForTab(effectId, state.currentEffectParams, tabId)
+  }, 150)
+}
+
 // Update parameters for specific tab
 function updateEffectParamsForTab(effectId, params, tabId) {
   console.log(`🎵 Updating effect params for tab ${tabId}, effect ${effectId}:`, params)
@@ -2205,6 +2222,19 @@ function updateEffectParamsForTab(effectId, params, tabId) {
     console.warn(`🎵 Param update for inactive effect ${effectId} on tab ${tabId} (current: ${state.currentEffectId})`)
     return
   }
+
+  // Drop no-op updates: MIDI sweeps repeat the same quantized value many
+  // times per second, and stepped params must not retrigger rebuilds
+  const changed = {}
+  let hasChange = false
+  for (const key of Object.keys(params)) {
+    if (state.currentEffectParams[key] !== params[key]) {
+      changed[key] = params[key]
+      hasChange = true
+    }
+  }
+  if (!hasChange) return
+  params = changed
 
   // Update live parameters for this tab
   Object.assign(state.liveParams, params)
@@ -2228,8 +2258,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       // Note: roomSize and decay require effect recreation
       if (params.roomSize !== undefined || params.decay !== undefined) {
-        console.log(`🎵 Recreating reverb for tab ${tabId} for roomSize/decay change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+        scheduleEffectRebuild(effectId, tabId)
       }
       break
 
@@ -2244,8 +2273,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       // Note: subdivision or tapTempo changes require effect recreation to recalculate delay time
       if (params.subdivision !== undefined || params.tapTempo !== undefined) {
-        console.log(`🎵 Recreating tap tempo delay for tab ${tabId} for timing change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+        scheduleEffectRebuild(effectId, tabId)
       }
       break
 
@@ -2257,8 +2285,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       // Note: loopSize and stutterRate changes require effect recreation
       if (params.loopSize !== undefined || params.stutterRate !== undefined) {
-        console.log(`🎵 Recreating loop chop effect for tab ${tabId} for parameter change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+        scheduleEffectRebuild(effectId, tabId)
       }
       break
 
@@ -2274,10 +2301,11 @@ function updateEffectParamsForTab(effectId, params, tabId) {
         smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
-      // Note: filterType changes require effect recreation
-      if (params.filterType !== undefined) {
-        console.log(`🎵 Recreating simple filter for tab ${tabId} for filter type change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      // Filter type switches live on the BiquadFilter, no rebuild needed
+      if (params.filterType !== undefined && state.currentEffect.input._filter) {
+        const liveFilterTypes = ['lowpass', 'highpass', 'bandpass']
+        state.currentEffect.input._filter.type =
+          liveFilterTypes[Math.floor(state.liveParams.filterType)] || 'lowpass'
       }
       break
 
@@ -2358,8 +2386,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       // Note: delayTime changes require effect recreation
       if (params.delayTime !== undefined) {
-        console.log(`🎵 Recreating comb filter for tab ${tabId} for delay time change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+        scheduleEffectRebuild(effectId, tabId)
       }
       break
 
@@ -2496,10 +2523,9 @@ function updateEffectParamsForTab(effectId, params, tabId) {
         smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
-      // Note: roomSize, decay, preDelay, and damping require effect recreation
-      if (params.roomSize !== undefined || params.decay !== undefined || params.preDelay !== undefined || params.damping !== undefined) {
-        console.log(`🎵 Recreating hall reverb for tab ${tabId} for parameter change`)
-        switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      // Note: roomSize, decay, and preDelay require effect recreation
+      if (params.roomSize !== undefined || params.decay !== undefined || params.preDelay !== undefined) {
+        scheduleEffectRebuild(effectId, tabId)
       }
       break
 
@@ -2510,6 +2536,14 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
         smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth, 0.015)
+      }
+      if (params.type !== undefined && state.currentEffect.input._lfo) {
+        const panWaveforms = ['sine', 'square', 'sawtooth', 'triangle']
+        state.currentEffect.input._lfo.type = panWaveforms[Math.floor(state.liveParams.type) % panWaveforms.length]
+      }
+      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
+        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
+        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       break
 
@@ -2634,9 +2668,31 @@ async function processAudioStreamForTab(streamId, tabId) {
 // port open, so any sendResponse after an await races the port teardown and
 // the sender sees "message port closed" even though processing succeeded.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // High-frequency visualizer polling: answer synchronously, no logging
+  // High-frequency visualizer polling: answer synchronously, no logging.
+  // Current effect params ride along so the popup can mirror MIDI moves.
   if (message.type === "GET_VISUALIZER_FRAME") {
-    sendResponse({ bands: getVisualizerBands(message.tabId) })
+    const frameState = tabAudioState.get(message.tabId)
+    sendResponse({
+      bands: getVisualizerBands(message.tabId),
+      effectId: frameState ? frameState.currentEffectId : null,
+      params: frameState ? frameState.currentEffectParams : null,
+      midi: { status: midiStatus, lastEvent: midiLastEvent }
+    })
+    return
+  }
+
+  // Popup asking whether a tab is genuinely capturing (storage can be stale)
+  if (message.type === "GET_TAB_STATUS") {
+    const statusState = tabAudioState.get(message.tabId)
+    sendResponse({ capturing: !!(statusState && statusState.currentStream) })
+    return
+  }
+
+  // Mapping updates pushed by the background when the popup saves changes
+  if (message.type === "MIDI_MAPPINGS_UPDATED") {
+    midiMappings = message.mappings || {}
+    // A mapping change may follow a fresh permission grant; try again
+    initMidi()
     return
   }
 
@@ -2655,6 +2711,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Set the effect for this tab
     state.currentEffectId = message.effectId || 'bitcrusher'
     state.currentEffectParams = message.params || {}
+    state.paramSpecs = message.paramSpecs || null
     console.log(`🎵 AFTER SETTING for tab ${tabId}: currentEffectId=${state.currentEffectId}, currentEffectParams=`, state.currentEffectParams)
 
     processAudioStreamForTab(message.streamId, tabId)
@@ -2700,6 +2757,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "SWITCH_EFFECT") {
     // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
     if (message.tabId === undefined) return
+    if (message.paramSpecs) {
+      getTabState(message.tabId).paramSpecs = message.paramSpecs
+    }
     switchEffectForTab(message.effectId, message.params, message.tabId)
     console.log(`🎵 Switched to ${message.effectId} for tab ${message.tabId}`)
     sendResponse({ success: true, message: `Switched to ${message.effectId}` })
@@ -2736,5 +2796,101 @@ function getVisualizerBands(tabId) {
   }
   return bands
 }
+
+// === MIDI control ===
+// The offscreen document outlives the popup, so hardware knobs keep working
+// while the popup is closed. Mappings are positional: a CC number maps to a
+// knob index (0-3) of whichever effect is active on each capturing tab.
+// Requires the one-time permission grant from midi-setup.html.
+// NOTE: offscreen documents can only use chrome.runtime messaging, not
+// chrome.storage, so mappings arrive from the background script: fetched
+// once at startup and pushed on every change.
+let midiMappings = {}
+let midiAccess = null
+let midiInitAttempted = false
+// Diagnostics surfaced to the popup via visualizer frames
+let midiStatus = 'initializing'
+let midiLastEvent = ''
+
+function requestMidiMappings() {
+  try {
+    chrome.runtime.sendMessage({ type: 'GET_MIDI_MAPPINGS' }, (response) => {
+      const err = chrome.runtime.lastError
+      if (!err && response && response.mappings) {
+        midiMappings = response.mappings
+      }
+      initMidi()
+    })
+  } catch (e) {
+    initMidi()
+  }
+}
+
+function attachMidiInputs() {
+  if (!midiAccess) return
+  const names = []
+  midiAccess.inputs.forEach((input) => {
+    input.onmidimessage = handleMidiMessage
+    names.push(input.name || 'unnamed')
+  })
+  midiStatus = names.length ? `listening (${names.join(', ')})` : 'listening (no inputs connected)'
+  console.log(`🎵 MIDI: ${midiStatus}`)
+}
+
+function initMidi() {
+  if (midiAccess || midiInitAttempted === 'pending') return
+  midiInitAttempted = 'pending'
+  if (!navigator.requestMIDIAccess) {
+    midiInitAttempted = true
+    midiStatus = 'web midi unsupported in offscreen document'
+    console.log("🎵 MIDI:", midiStatus)
+    return
+  }
+  navigator.requestMIDIAccess({ sysex: false })
+    .then((access) => {
+      midiAccess = access
+      midiInitAttempted = true
+      attachMidiInputs()
+      access.onstatechange = attachMidiInputs
+    })
+    .catch((err) => {
+      // Not granted yet; the popup's M button opens the setup page
+      midiInitAttempted = true
+      midiStatus = `access denied: ${err && err.message}`
+      console.log("🎵 MIDI:", midiStatus)
+    })
+}
+
+function handleMidiMessage(msg) {
+  const [statusByte, cc, value] = msg.data
+  if ((statusByte & 0xf0) !== 0xb0) return // control change messages only
+
+  const knobIndex = midiMappings[cc]
+  if (knobIndex === undefined) {
+    midiLastEvent = `cc ${cc} (unmapped)`
+    return
+  }
+
+  // Apply to every capturing tab's active effect
+  let applied = false
+  for (const [tabId, state] of tabAudioState) {
+    const spec = state.paramSpecs && state.paramSpecs[knobIndex]
+    if (!spec || !state.currentEffect) continue
+
+    let paramValue = spec.min + (value / 127) * (spec.max - spec.min)
+    if (spec.step) {
+      paramValue = Math.round(paramValue / spec.step) * spec.step
+    }
+    paramValue = Math.max(spec.min, Math.min(spec.max, paramValue))
+
+    updateEffectParamsForTab(state.currentEffectId, { [spec.key]: paramValue }, tabId)
+    applied = true
+  }
+  midiLastEvent = applied
+    ? `cc ${cc} -> knob ${knobIndex + 1}`
+    : `cc ${cc} -> knob ${knobIndex + 1} (no active capture)`
+}
+
+requestMidiMappings()
 
 console.log("🎵 Multi-effect offscreen document ready and listening for messages")
