@@ -52,6 +52,13 @@ function initializeAudioContext() {
 function smoothParamChange(param, targetValue, rampTime = 0.02, type = 'exponential') {
   if (!param || !audioContext) return
 
+  // A non-finite target would throw inside the message handler and take the
+  // whole update down with it; refuse it loudly instead
+  if (!Number.isFinite(targetValue)) {
+    console.warn('🎵 Ignoring non-finite param target:', targetValue)
+    return
+  }
+
   const now = audioContext.currentTime
 
   // Cancel any scheduled changes
@@ -2085,6 +2092,12 @@ function switchEffectForTab(effectId, params, tabId) {
   const oldEffect = state.currentEffect
   const crossfadeTime = 0.05 // 50ms crossfade
 
+  // Any explicit switch supersedes a pending debounced rebuild
+  if (state._rebuildTimer) {
+    clearTimeout(state._rebuildTimer)
+    state._rebuildTimer = null
+  }
+
   // Create new effect for this tab. On failure keep the current effect
   // running rather than leaving the chain half-connected.
   let newEffect
@@ -2208,6 +2221,9 @@ function scheduleEffectRebuild(effectId, tabId) {
   state._rebuildTimer = setTimeout(() => {
     state._rebuildTimer = null
     if (!tabAudioState.has(tabId)) return
+    // The user may have switched effects while this was pending; rebuilding
+    // the old effect now would flip the engine out from under the popup
+    if (state.currentEffectId !== effectId) return
     switchEffectForTab(effectId, state.currentEffectParams, tabId)
   }, 150)
 }
@@ -2882,6 +2898,7 @@ function handleMidiMessage(msg) {
       paramValue = Math.round(paramValue / spec.step) * spec.step
     }
     paramValue = Math.max(spec.min, Math.min(spec.max, paramValue))
+    if (!Number.isFinite(paramValue)) continue
 
     updateEffectParamsForTab(state.currentEffectId, { [spec.key]: paramValue }, tabId)
     applied = true
