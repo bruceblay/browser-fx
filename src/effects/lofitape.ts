@@ -3,7 +3,7 @@ import type { EffectConfig } from './types'
 export const lofiTapeConfig: EffectConfig = {
   id: 'lofitape',
   name: 'Lo-Fi Tape',
-  description: 'Analog tape degradation with wow, flutter, saturation and hiss',
+  description: 'Analog tape degradation with wow, flutter and saturation',
   parameters: [
     {
       key: 'wowDepth',
@@ -33,24 +33,6 @@ export const lofiTapeConfig: EffectConfig = {
       unit: '%'
     },
     {
-      key: 'toneRolloff',
-      label: 'Tone',
-      min: 1000,
-      max: 12000,
-      step: 100,
-      default: 6000,
-      unit: 'Hz'
-    },
-    {
-      key: 'noise',
-      label: 'Noise',
-      min: 0,
-      max: 1,
-      step: 0.01,
-      default: 0,
-      unit: '%'
-    },
-    {
       key: 'wet',
       label: 'Dry/Wet',
       min: 0,
@@ -64,8 +46,6 @@ export const lofiTapeConfig: EffectConfig = {
     wowDepth: 0.3,
     flutterRate: 6.0,
     saturation: 0.4,
-    toneRolloff: 6000,
-    noise: 0,
     wet: 0.8
   },
   sliderColor: '#D2691E'

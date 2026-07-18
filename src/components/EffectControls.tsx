@@ -6,6 +6,7 @@ interface EffectControlsProps {
   effectConfig: EffectConfig | null
   effectParams: Record<string, number>
   isCapturing: boolean
+  startFailed: boolean
   onParamUpdate: (param: string, value: number) => void
   onStart: () => void
 }
@@ -36,7 +37,8 @@ const arcPath = (cx: number, cy: number, r: number, startAngle: number, endAngle
 
 const formatValue = (v: number, param: ParameterConfig): string => {
   switch (param.unit) {
-    case '%': return `${Math.round(v * 100)}%`
+    // Percent params come in two scales: 0..1 fractions and 0..100 ranges
+    case '%': return param.max > 1 ? `${Math.round(v)}%` : `${Math.round(v * 100)}%`
     case 's': return v < 1 ? `${Math.round(v * 1000)}ms` : `${parseFloat(v.toFixed(1))}s`
     case 'ms': return `${Math.round(v)}ms`
     case 'Hz': return v >= 1000 ? `${parseFloat((v / 1000).toFixed(1))}kHz` : `${Math.round(v)}Hz`
@@ -52,6 +54,7 @@ export function EffectControls({
   effectConfig,
   effectParams,
   isCapturing,
+  startFailed,
   onParamUpdate,
   onStart
 }: EffectControlsProps) {
@@ -213,17 +216,19 @@ export function EffectControls({
               padding: '4px 8px',
               fontFamily: 'inherit',
               fontSize: 10,
-              color: theme.textFaint,
+              color: startFailed ? '#e0796a' : theme.textFaint,
               textTransform: 'lowercase',
               letterSpacing: '0.3px',
               cursor: 'pointer',
               userSelect: 'none',
               transition: 'color 0.15s ease'
             }}
-            onMouseOver={(e) => { e.currentTarget.style.color = theme.textDim }}
-            onMouseOut={(e) => { e.currentTarget.style.color = theme.textFaint }}
+            onMouseOver={(e) => { e.currentTarget.style.color = startFailed ? '#eda093' : theme.textDim }}
+            onMouseOut={(e) => { e.currentTarget.style.color = startFailed ? '#e0796a' : theme.textFaint }}
           >
-            press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to start
+            {startFailed
+              ? <>capture failed, press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to retry</>
+              : <>press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to start</>}
           </button>
         )}
       </div>

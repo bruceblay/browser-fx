@@ -118,6 +118,11 @@ async function startCapture(message: { effectId: string; params: Record<string, 
 // listener returns a Promise instead of the literal `true` Chrome needs to
 // keep the response port open, which makes responses flaky.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Visualizer polling is popup-to-offscreen traffic at 20Hz; stay out of it
+  if (message.type === "GET_VISUALIZER_FRAME") {
+    return
+  }
+
   console.log("Background received message:", message)
 
   if (message.type === "START_CAPTURE") {

@@ -3,6 +3,7 @@ import "./fonts.css"
 import { Header } from "./components/Header"
 import { EffectSelector } from "./components/EffectSelector"
 import { EffectControls } from "./components/EffectControls"
+import { Visualizer } from "./components/Visualizer"
 import { AboutView } from "./components/AboutView"
 import { getEffectConfig, getEffectDefaults } from "./effects"
 import { theme } from "./theme"
@@ -15,6 +16,7 @@ function IndexPopup() {
   )
   const [showAbout, setShowAbout] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
+  const [startFailed, setStartFailed] = useState(false)
 
   const currentEffectConfig = getEffectConfig(selectedEffect)
 
@@ -146,6 +148,7 @@ function IndexPopup() {
   const handleStartCapture = () => {
     if (startPending.current) return
     startPending.current = true
+    setStartFailed(false)
     setIsCapturing(true)
 
     // Set a timeout to handle message port issues
@@ -168,6 +171,7 @@ function IndexPopup() {
         // Only revert state for genuine errors, not timeouts
         if (!error.includes("message port closed")) {
           setIsCapturing(false)
+          setStartFailed(true)
         } else {
           console.log("Message port timeout, but capture may still be working")
         }
@@ -177,6 +181,7 @@ function IndexPopup() {
       if (!response?.success) {
         console.error("Failed to start capture:", response?.error)
         setIsCapturing(false)
+        setStartFailed(true)
       } else {
         console.log("Capture started successfully")
       }
@@ -193,6 +198,7 @@ function IndexPopup() {
 
   const handleClearStreams = () => {
     setIsCapturing(false)
+    setStartFailed(false)
     chrome.runtime.sendMessage({
       type: "CLEAR_ALL_STREAMS"
     })
@@ -237,26 +243,43 @@ function IndexPopup() {
         padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
-        minHeight: 0
+        minHeight: 0,
+        position: 'relative'
       }}>
-        <EffectSelector
-          selectedEffect={selectedEffect}
-          onEffectChange={handleEffectChange}
+        <Visualizer
+          isCapturing={isCapturing}
+          accentColor={currentEffectConfig?.sliderColor || theme.led}
+          tabId={currentTabId}
         />
 
         <div style={{
+          position: 'relative',
+          zIndex: 1,
           flex: 1,
           display: 'flex',
-          minHeight: 0,
-          padding: '8px 0'
+          flexDirection: 'column',
+          minHeight: 0
         }}>
-          <EffectControls
-            effectConfig={currentEffectConfig}
-            effectParams={effectParams}
-            isCapturing={isCapturing}
-            onParamUpdate={handleParamUpdate}
-            onStart={handleStartCapture}
+          <EffectSelector
+            selectedEffect={selectedEffect}
+            onEffectChange={handleEffectChange}
           />
+
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            minHeight: 0,
+            padding: '8px 0'
+          }}>
+            <EffectControls
+              effectConfig={currentEffectConfig}
+              effectParams={effectParams}
+              isCapturing={isCapturing}
+              startFailed={startFailed}
+              onParamUpdate={handleParamUpdate}
+              onStart={handleStartCapture}
+            />
+          </div>
         </div>
       </div>
     </div>

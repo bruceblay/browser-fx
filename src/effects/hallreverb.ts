@@ -3,7 +3,7 @@ import { EffectConfig } from './types'
 export const hallReverbConfig: EffectConfig = {
   id: 'hallreverb',
   name: 'Hall Reverb',
-  description: 'Large concert hall reverb with pre-delay and damping',
+  description: 'Large concert hall reverb with pre-delay',
   parameters: [
     {
       key: 'roomSize',
@@ -33,15 +33,6 @@ export const hallReverbConfig: EffectConfig = {
       unit: 's'
     },
     {
-      key: 'damping',
-      label: 'High Cut',
-      min: 1000,
-      max: 10000,
-      step: 100,
-      default: 6000,
-      unit: 'Hz'
-    },
-    {
       key: 'wet',
       label: 'Dry/Wet',
       min: 0,
@@ -55,7 +46,6 @@ export const hallReverbConfig: EffectConfig = {
     roomSize: 0.8,   // Large hall
     decay: 4.0,      // 4 second decay
     preDelay: 0.03,  // 30ms pre-delay
-    damping: 6000,   // 6kHz high cut
     wet: 0.4         // 40% wet
   },
   sliderColor: '#6495ED' // Boss RV-6 cornflower blue

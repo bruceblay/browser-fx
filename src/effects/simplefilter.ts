@@ -20,7 +20,7 @@ export const simpleFilterConfig: EffectConfig = {
       min: 0,
       max: 30,
       step: 0.5,
-      default: 5,
+      default: 15,
       unit: 'dB'
     },
     {
@@ -44,7 +44,7 @@ export const simpleFilterConfig: EffectConfig = {
   ],
   defaultValues: {
     cutoffFreq: 2000,    // 2kHz cutoff
-    resonance: 5,        // 5dB resonance
+    resonance: 15,       // 15dB resonance
     filterType: 0,       // lowpass
     wet: 1.0             // 100% wet (full filtering)
   },

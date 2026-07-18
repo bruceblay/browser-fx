@@ -99,7 +99,7 @@ export function AboutView({ onBack }: AboutViewProps) {
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Delay</strong> - Stereo bouncing delay effect</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>DJ EQ</strong> - 3-band equalizer for quick tonal shaping</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Auto Panner</strong> - Automatic left-right panning with LFO modulation</li>
-            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Hall Reverb</strong> - Large concert hall reverb with pre-delay and damping</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Hall Reverb</strong> - Large concert hall reverb with pre-delay</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Distortion</strong> - Waveshaping distortion with tone control</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Chorus</strong> - Rich modulated doubling effect</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Phaser</strong> - Classic sweeping phase modulation</li>
@@ -111,7 +111,7 @@ export function AboutView({ onBack }: AboutViewProps) {
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Ring Mod</strong> - Metallic and robotic ring modulation effects</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Tap Delay</strong> - Beat-synced delay with tap tempo and subdivision control</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Tape Stop</strong> - Turntable power-down with pitch ramp to silence</li>
-            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Lo-Fi Tape</strong> - Analog tape degradation with wow, flutter, saturation and hiss</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Lo-Fi Tape</strong> - Analog tape degradation with wow, flutter and saturation</li>
           </ul>
 
           <h4 style={{

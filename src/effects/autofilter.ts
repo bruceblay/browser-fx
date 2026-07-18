@@ -15,15 +15,6 @@ export const autoFilterConfig: EffectConfig = {
       unit: 'Hz'
     },
     {
-      key: 'depth',
-      label: 'Depth',
-      min: 0,
-      max: 1,
-      step: 0.01,
-      default: 0.8,
-      unit: '%'
-    },
-    {
       key: 'baseFreq',
       label: 'Base Frequency',
       min: 100,
@@ -53,7 +44,6 @@ export const autoFilterConfig: EffectConfig = {
   ],
   defaultValues: {
     rate: 5.0,
-    depth: 0.8,
     baseFreq: 990,
     octaves: 1.0,
     wet: 1.0

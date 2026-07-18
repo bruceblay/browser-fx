@@ -71,6 +71,13 @@ function smoothParamChange(param, targetValue, rampTime = 0.02, type = 'exponent
   }
 }
 
+// Chorus LFO depth in seconds: a gentle absolute swing (max ~2ms) that stays
+// clear of the 0ms delay clamp. Proportional scaling at short delays produced
+// deep pitch wobble; fixed-ms modulation is what keeps chorus lush.
+function chorusModDepth(delayMs, depth) {
+  return Math.min(depth * 0.002, (delayMs / 1000) * 0.8)
+}
+
 // Get or create tab audio state
 function getTabState(tabId) {
   if (!tabAudioState.has(tabId)) {
@@ -126,6 +133,9 @@ function cleanupTabState(tabId) {
   }
   if (state.destinationNode) {
     state.destinationNode.disconnect()
+  }
+  if (state.streamDestination) {
+    state.streamDestination.disconnect()
   }
   if (state.audioElement) {
     state.audioElement.pause()
@@ -304,15 +314,19 @@ function createDistortion(context, params) {
 function createChorus(context, params) {
   console.log('🎵 CHORUS: Creating Tone.js-style chorus effect')
 
-  // Initialize live params with Tone.js-based defaults
-  liveParams.rate = params.rate !== undefined ? params.rate : 2.0
-  liveParams.depth = params.depth !== undefined ? params.depth : 0.6
-  liveParams.delay = params.delay !== undefined ? params.delay : 5  // milliseconds (2-20ms range)
-  liveParams.wet = params.wet !== undefined ? params.wet : 0.7
+  // Initialize live params
+  liveParams.rate = params.rate !== undefined ? params.rate : 1.0
+  liveParams.depth = params.depth !== undefined ? params.depth : 0.35
+  liveParams.delay = params.delay !== undefined ? params.delay : 14  // milliseconds
+  liveParams.wet = params.wet !== undefined ? params.wet : 0.5
 
-  // Create delay lines for chorus
+  // Two modulated voices panned apart, dry anchored in the center. Voice
+  // delays sit in doubling territory (14ms and 21ms by default) instead of
+  // the sub-10ms comb-filter range that reads as flanging.
   const delay1 = context.createDelay(0.1)
   const delay2 = context.createDelay(0.1)
+  const panner1 = context.createStereoPanner()
+  const panner2 = context.createStereoPanner()
   const lfo1 = context.createOscillator()
   const lfo2 = context.createOscillator()
   const lfoGain1 = context.createGain()
@@ -322,19 +336,21 @@ function createChorus(context, params) {
   const inputGain = context.createGain()
   const outputGain = context.createGain()
 
-  // Set up delay times - convert milliseconds to seconds
-  delay1.delayTime.value = liveParams.delay / 1000    // Convert ms to seconds
-  delay2.delayTime.value = (liveParams.delay * 1.2) / 1000  // Slightly offset second delay
+  delay1.delayTime.value = liveParams.delay / 1000
+  delay2.delayTime.value = (liveParams.delay * 1.5) / 1000
 
-  // Set up LFOs based on parameters
+  // Detuned LFO rates keep the two voices from ever phase-locking
   lfo1.frequency.value = liveParams.rate
-  lfo2.frequency.value = liveParams.rate * 1.3
+  lfo2.frequency.value = liveParams.rate * 1.23
   lfo1.type = 'sine'
   lfo2.type = 'sine'
 
-  // Scale modulation depth to the base delay so delayTime never clamps at zero
-  lfoGain1.gain.value = liveParams.depth * (liveParams.delay / 1000) * 0.9
-  lfoGain2.gain.value = liveParams.depth * (liveParams.delay * 1.2 / 1000) * 0.7
+  lfoGain1.gain.value = chorusModDepth(liveParams.delay, liveParams.depth)
+  lfoGain2.gain.value = chorusModDepth(liveParams.delay * 1.5, liveParams.depth) * 0.8
+
+  // Ensemble width: voice one left, voice two right
+  panner1.pan.value = -0.6
+  panner2.pan.value = 0.6
 
   // Set up wet/dry mix based on parameters
   wetGain.gain.value = liveParams.wet
@@ -350,8 +366,10 @@ function createChorus(context, params) {
   inputGain.connect(delay1)
   inputGain.connect(delay2)
   inputGain.connect(dryGain)
-  delay1.connect(wetGain)
-  delay2.connect(wetGain)
+  delay1.connect(panner1)
+  delay2.connect(panner2)
+  panner1.connect(wetGain)
+  panner2.connect(wetGain)
 
   wetGain.connect(outputGain)
   dryGain.connect(outputGain)
@@ -1128,7 +1146,7 @@ function createSimpleFilter(context, params, tabLiveParams) {
 
   // Initialize live params
   tabLiveParams.cutoffFreq = params.cutoffFreq !== undefined ? params.cutoffFreq : 2000
-  tabLiveParams.resonance = params.resonance !== undefined ? params.resonance : 5
+  tabLiveParams.resonance = params.resonance !== undefined ? params.resonance : 15
   tabLiveParams.filterType = params.filterType !== undefined ? params.filterType : 0
   tabLiveParams.wet = params.wet !== undefined ? params.wet : 1.0
 
@@ -1445,7 +1463,7 @@ function createRingModulator(context, params, tabLiveParams) {
   inputGain._wetGain = wetGain
   inputGain._dryGain = dryGain
 
-  console.log(`🎵 RINGMOD: Created TRUE ring modulator with ${tabLiveParams.carrierFreq}Hz ${waveformType} carrier, ${tabLiveParams.mix}% mix`)
+  console.log(`🎵 RINGMOD: Created TRUE ring modulator with ${tabLiveParams.carrierFreq}Hz carrier, ${tabLiveParams.mix}% mix`)
 
   return { input: inputGain, output: outputGain }
 }
@@ -1807,7 +1825,6 @@ function createLofiTape(context, params, tabLiveParams) {
   tabLiveParams.flutterRate = params.flutterRate || 6.0
   tabLiveParams.saturation = params.saturation !== undefined ? params.saturation : 0.4
   tabLiveParams.toneRolloff = params.toneRolloff || 6000
-  tabLiveParams.noise = params.noise !== undefined ? params.noise : 0
   tabLiveParams.wet = params.wet !== undefined ? params.wet : 0.8
 
   const inputGain = context.createGain()
@@ -1867,40 +1884,12 @@ function createLofiTape(context, params, tabLiveParams) {
   toneFilter.frequency.value = tabLiveParams.toneRolloff
   toneFilter.Q.value = 0.7 // gentle rolloff, no resonance
 
-  // === TAPE HISS: White noise source ===
-  // Create a noise buffer (2 seconds of white noise)
-  const noiseLength = 2 * context.sampleRate
-  const noiseBuffer = context.createBuffer(1, noiseLength, context.sampleRate)
-  const noiseData = noiseBuffer.getChannelData(0)
-  for (let i = 0; i < noiseLength; i++) {
-    noiseData[i] = Math.random() * 2 - 1
-  }
-
-  const noiseSource = context.createBufferSource()
-  noiseSource.buffer = noiseBuffer
-  noiseSource.loop = true
-
-  // Shape the noise to sound more like tape hiss (high-pass above 2kHz)
-  const noiseHPF = context.createBiquadFilter()
-  noiseHPF.type = 'highpass'
-  noiseHPF.frequency.value = 2000
-  noiseHPF.Q.value = 0.5
-
-  const noiseGainNode = context.createGain()
-  noiseGainNode.gain.value = tabLiveParams.noise * 0.05 // keep it subtle
-
-  noiseSource.connect(noiseHPF)
-  noiseHPF.connect(noiseGainNode)
-  noiseSource.start()
-
   // === SIGNAL CHAIN ===
-  // input → delay (wow/flutter) → waveshaper (saturation) → lowpass (tone) → wet mix
-  // noise also feeds into wet mix
+  // input -> delay (wow/flutter) -> waveshaper (saturation) -> lowpass (tone) -> wet mix
   inputGain.connect(delayNode)
   delayNode.connect(waveshaper)
   waveshaper.connect(toneFilter)
   toneFilter.connect(wetGain)
-  noiseGainNode.connect(wetGain)
 
   // Dry path
   inputGain.connect(dryGain)
@@ -1920,11 +1909,9 @@ function createLofiTape(context, params, tabLiveParams) {
   inputGain._wowGain = wowGain
   inputGain._flutterGain = flutterGain
   inputGain._toneFilter = toneFilter
-  inputGain._noiseGain = noiseGainNode
-  inputGain._noiseSource = noiseSource
   inputGain._updateSaturationCurve = updateSaturationCurve
 
-  console.log(`🎵 LOFITAPE: Created with wow=${tabLiveParams.wowDepth}, flutter=${tabLiveParams.flutterRate}Hz, sat=${tabLiveParams.saturation}, tone=${tabLiveParams.toneRolloff}Hz, noise=${tabLiveParams.noise}`)
+  console.log(`🎵 LOFITAPE: Created with wow=${tabLiveParams.wowDepth}, flutter=${tabLiveParams.flutterRate}Hz, sat=${tabLiveParams.saturation}`)
 
   return { input: inputGain, output: outputGain }
 }
@@ -2094,8 +2081,15 @@ function switchEffectForTab(effectId, params, tabId) {
   const oldEffect = state.currentEffect
   const crossfadeTime = 0.05 // 50ms crossfade
 
-  // Create new effect for this tab
-  const newEffect = createEffect(effectId, params, state.liveParams)
+  // Create new effect for this tab. On failure keep the current effect
+  // running rather than leaving the chain half-connected.
+  let newEffect
+  try {
+    newEffect = createEffect(effectId, params, state.liveParams)
+  } catch (error) {
+    console.error(`🎵 Failed to create effect ${effectId} for tab ${tabId}:`, error)
+    throw error
+  }
 
   // If we have active audio, do a crossfade
   if (state.sourceNode && state.destinationNode && oldEffect) {
@@ -2391,17 +2385,17 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       if (params.rate !== undefined && state.currentEffect.input._lfo1 && state.currentEffect.input._lfo2) {
         smoothParamChange(state.currentEffect.input._lfo1.frequency, state.liveParams.rate, 0.02)
-        smoothParamChange(state.currentEffect.input._lfo2.frequency, state.liveParams.rate * 1.3, 0.02)
+        smoothParamChange(state.currentEffect.input._lfo2.frequency, state.liveParams.rate * 1.23, 0.02)
       }
       if (params.depth !== undefined || params.delay !== undefined) {
-        const delaySec = state.liveParams.delay / 1000
+        const delayMs = state.liveParams.delay
         if (params.delay !== undefined && state.currentEffect.input._delay1 && state.currentEffect.input._delay2) {
-          smoothParamChange(state.currentEffect.input._delay1.delayTime, delaySec, 0.03, 'linear')
-          smoothParamChange(state.currentEffect.input._delay2.delayTime, delaySec * 1.2, 0.03, 'linear')
+          smoothParamChange(state.currentEffect.input._delay1.delayTime, delayMs / 1000, 0.03, 'linear')
+          smoothParamChange(state.currentEffect.input._delay2.delayTime, (delayMs * 1.5) / 1000, 0.03, 'linear')
         }
         if (state.currentEffect.input._lfoGain1 && state.currentEffect.input._lfoGain2) {
-          smoothParamChange(state.currentEffect.input._lfoGain1.gain, state.liveParams.depth * delaySec * 0.9, 0.02)
-          smoothParamChange(state.currentEffect.input._lfoGain2.gain, state.liveParams.depth * delaySec * 1.2 * 0.7, 0.02)
+          smoothParamChange(state.currentEffect.input._lfoGain1.gain, chorusModDepth(delayMs, state.liveParams.depth), 0.02)
+          smoothParamChange(state.currentEffect.input._lfoGain2.gain, chorusModDepth(delayMs * 1.5, state.liveParams.depth) * 0.8, 0.02)
         }
       }
       break
@@ -2566,12 +2560,6 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       if (params.saturation !== undefined && state.currentEffect.input._updateSaturationCurve) {
         state.currentEffect.input._updateSaturationCurve()
       }
-      if (params.toneRolloff !== undefined && state.currentEffect.input._toneFilter) {
-        smoothParamChange(state.currentEffect.input._toneFilter.frequency, state.liveParams.toneRolloff, 0.025)
-      }
-      if (params.noise !== undefined && state.currentEffect.input._noiseGain) {
-        smoothParamChange(state.currentEffect.input._noiseGain.gain, state.liveParams.noise * 0.05, 0.015)
-      }
       break
 
     default:
@@ -2603,9 +2591,17 @@ async function processAudioStreamForTab(streamId, tabId) {
 
     console.log(`🎵 MediaStream obtained for tab ${tabId}:`, stream)
 
-    // Create audio graph for this tab
+    // Create audio graph for this tab. Effects connect into destinationNode
+    // (a plain gain bus), which feeds both the playback stream and an
+    // analyser tap used by the popup's visualizer.
     state.sourceNode = new MediaStreamAudioSourceNode(ctx, { mediaStream: stream })
-    state.destinationNode = new MediaStreamAudioDestinationNode(ctx)
+    state.streamDestination = new MediaStreamAudioDestinationNode(ctx)
+    state.destinationNode = ctx.createGain()
+    state.analyser = ctx.createAnalyser()
+    state.analyser.fftSize = 512
+    state.analyser.smoothingTimeConstant = 0.5
+    state.destinationNode.connect(state.streamDestination)
+    state.destinationNode.connect(state.analyser)
 
     // Create initial effect with the parameters from the message
     const initialParams = state.currentEffectParams
@@ -2616,7 +2612,7 @@ async function processAudioStreamForTab(streamId, tabId) {
 
     // Play the processed stream
     state.audioElement = new Audio()
-    state.audioElement.srcObject = state.destinationNode.stream
+    state.audioElement.srcObject = state.streamDestination.stream
     state.audioElement.autoplay = true
 
     state.currentStream = stream
@@ -2625,6 +2621,10 @@ async function processAudioStreamForTab(streamId, tabId) {
 
   } catch (error) {
     console.error(`🎵 Error setting up audio processing for tab ${tabId}:`, error)
+    // Propagate so PROCESS_STREAM reports failure and the popup reverts,
+    // instead of showing an on state with no audio processing behind it
+    cleanupTabState(tabId)
+    throw error
   }
 }
 
@@ -2634,14 +2634,22 @@ async function processAudioStreamForTab(streamId, tabId) {
 // port open, so any sendResponse after an await races the port teardown and
 // the sender sees "message port closed" even though processing succeeded.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // High-frequency visualizer polling: answer synchronously, no logging
+  if (message.type === "GET_VISUALIZER_FRAME") {
+    sendResponse({ bands: getVisualizerBands(message.tabId) })
+    return
+  }
+
   console.log("🎵 MULTI-EFFECT OFFSCREEN received message:", message.type, message)
   console.log("🎵 MESSAGE RECEIVED - OFFSCREEN IS WORKING!")
 
   if (message.type === "PROCESS_STREAM") {
     console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, effectId=${message.effectId}, params=`, message.params)
 
-    // Get tab state
+    // Start from a clean slate: a stale stream left over from a previous
+    // capture blocks the new getUserMedia and the effect silently never engages
     const tabId = message.tabId
+    cleanupTabState(tabId)
     const state = getTabState(tabId)
 
     // Set the effect for this tab
@@ -2661,13 +2669,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "STOP_STREAM") {
-    const tabId = message.tabId
-    if (tabId) {
-      cleanupTabState(tabId)
-      console.log(`🎵 Stream stopped for tab ${tabId}`)
-    } else {
-      console.warn("🎵 STOP_STREAM received without tabId")
-    }
+    // No tabId means this is the popup's broadcast copy; the background
+    // re-forwards the real one with a tabId attached
+    if (message.tabId === undefined) return
+    cleanupTabState(message.tabId)
+    console.log(`🎵 Stream stopped for tab ${message.tabId}`)
     sendResponse({ success: true, message: "Stream stopped" })
     return
   }
@@ -2683,25 +2689,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "UPDATE_EFFECT_PARAMS") {
-    const tabId = message.tabId
-    if (tabId) {
-      updateEffectParamsForTab(message.effectId, message.params, tabId)
-      console.log(`🎵 Parameters updated for tab ${tabId}`)
-    } else {
-      console.warn("🎵 UPDATE_EFFECT_PARAMS received without tabId")
-    }
+    // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
+    if (message.tabId === undefined) return
+    updateEffectParamsForTab(message.effectId, message.params, message.tabId)
+    console.log(`🎵 Parameters updated for tab ${message.tabId}`)
     sendResponse({ success: true, message: "Parameters updated" })
     return
   }
 
   if (message.type === "SWITCH_EFFECT") {
-    const tabId = message.tabId
-    if (tabId) {
-      switchEffectForTab(message.effectId, message.params, tabId)
-      console.log(`🎵 Switched to ${message.effectId} for tab ${tabId}`)
-    } else {
-      console.warn("🎵 SWITCH_EFFECT received without tabId")
-    }
+    // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
+    if (message.tabId === undefined) return
+    switchEffectForTab(message.effectId, message.params, message.tabId)
+    console.log(`🎵 Switched to ${message.effectId} for tab ${message.tabId}`)
     sendResponse({ success: true, message: `Switched to ${message.effectId}` })
     return
   }
@@ -2709,5 +2709,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Unknown message (e.g. popup-to-background traffic like START_CAPTURE):
   // don't respond and don't hold the port, so the real recipient's response wins
 })
+
+// Visualizer feed: compute compact log-spaced band energies (0..1) from a
+// tab's analyser. The popup polls these via GET_VISUALIZER_FRAME messages.
+const VISUALIZER_BAND_COUNT = 16
+let visualizerFreqData = null
+
+function getVisualizerBands(tabId) {
+  const state = tabAudioState.get(tabId)
+  const analyser = state && state.analyser
+  if (!analyser) return null
+
+  if (!visualizerFreqData || visualizerFreqData.length !== analyser.frequencyBinCount) {
+    visualizerFreqData = new Uint8Array(analyser.frequencyBinCount)
+  }
+  analyser.getByteFrequencyData(visualizerFreqData)
+
+  const bands = new Array(VISUALIZER_BAND_COUNT)
+  const binCount = visualizerFreqData.length
+  for (let b = 0; b < VISUALIZER_BAND_COUNT; b++) {
+    const start = Math.floor(Math.pow(binCount, b / VISUALIZER_BAND_COUNT))
+    const end = Math.max(start + 1, Math.floor(Math.pow(binCount, (b + 1) / VISUALIZER_BAND_COUNT)))
+    let sum = 0
+    for (let i = start; i < end && i < binCount; i++) sum += visualizerFreqData[i]
+    bands[b] = sum / ((Math.min(end, binCount) - start) * 255)
+  }
+  return bands
+}
 
 console.log("🎵 Multi-effect offscreen document ready and listening for messages")
