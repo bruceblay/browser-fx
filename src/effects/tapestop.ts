@@ -10,7 +10,7 @@ export const tapeStopConfig: EffectConfig = {
       label: 'Stop Time',
       min: 0.1,
       max: 3.0,
-      step: 0.1,
+      step: 0.05,
       default: 1.0,
       unit: 's'
     },
@@ -19,7 +19,7 @@ export const tapeStopConfig: EffectConfig = {
       label: 'Restart Time',
       min: 0.1,
       max: 3.0,
-      step: 0.1,
+      step: 0.05,
       default: 0.5,
       unit: 's'
     },

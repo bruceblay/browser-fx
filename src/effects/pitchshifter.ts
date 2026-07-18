@@ -19,7 +19,7 @@ export const pitchShifterConfig: EffectConfig = {
       label: 'Window Size',
       min: 0.01,
       max: 0.1,
-      step: 0.01,
+      step: 0.005,
       default: 0.05,
       unit: 's'
     },

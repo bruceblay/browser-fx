@@ -28,7 +28,7 @@ export const flangerConfig: EffectConfig = {
       label: 'Feedback',
       min: 0,
       max: 0.95,
-      step: 0.05,
+      step: 0.01,
       default: 0.3,
       unit: '%'
     },

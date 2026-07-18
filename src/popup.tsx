@@ -448,8 +448,7 @@ function IndexPopup() {
           <div style={{
             flex: 1,
             display: 'flex',
-            minHeight: 0,
-            padding: '8px 0'
+            minHeight: 0
           }}>
             <EffectControls
               effectConfig={currentEffectConfig}

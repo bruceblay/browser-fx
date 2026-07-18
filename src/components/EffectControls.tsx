@@ -84,8 +84,28 @@ export function EffectControls({
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Lighter top spacer keeps the knobs closer to the selector */}
-      <div style={{ flex: 0.5 }} />
+      {/* Lighter top spacer keeps the knobs closer to the selector. Learn
+          mode grows it so the instruction line floats with air around it. */}
+      <div style={{
+        flex: midiLearn ? 1.2 : 0.5,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {midiLearn && (
+          <span style={{
+            fontSize: 10,
+            color: theme.led,
+            textTransform: 'lowercase',
+            letterSpacing: '0.3px',
+            userSelect: 'none'
+          }}>
+            {midiLearnTarget === null
+              ? 'click a knob, then move a control on your midi device'
+              : 'now move a control on your midi device...'}
+          </span>
+        )}
+      </div>
 
       <div style={{
         display: 'flex',
@@ -262,16 +282,10 @@ export function EffectControls({
             alignItems: 'center',
             gap: 3,
             fontSize: 10,
-            color: theme.led,
             textTransform: 'lowercase',
             letterSpacing: '0.3px',
             userSelect: 'none'
           }}>
-            <span>
-              {midiLearnTarget === null
-                ? 'click a knob, then move a control on your midi device'
-                : 'now move a control on your midi device...'}
-            </span>
             {/* Live engine status while capturing, for troubleshooting */}
             {midiStatus && (
               <span style={{ color: theme.textFaint, fontSize: 9 }}>

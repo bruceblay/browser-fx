@@ -19,7 +19,7 @@ export const combFilterConfig: EffectConfig = {
       label: 'Feedback',
       min: 0.70,
       max: 0.95,
-      step: 0.05,
+      step: 0.01,
       default: 0.7,
       unit: '%'
     },
@@ -28,7 +28,7 @@ export const combFilterConfig: EffectConfig = {
       label: 'Feedforward',
       min: 0,
       max: 1,
-      step: 0.05,
+      step: 0.01,
       default: 0.5,
       unit: '%'
     },

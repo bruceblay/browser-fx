@@ -28,7 +28,7 @@ export const hallReverbConfig: EffectConfig = {
       label: 'Pre-delay',
       min: 0,
       max: 0.2,
-      step: 0.01,
+      step: 0.005,
       default: 0.03,
       unit: 's'
     },
