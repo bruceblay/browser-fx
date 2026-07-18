@@ -4,6 +4,8 @@ interface VisualizerProps {
   isCapturing: boolean
   accentColor: string
   tabId: number | null
+  // Overall opacity multiplier; lower it when text sits on top
+  intensity?: number
   onFrame?: (
     effectId: string | null,
     params: Record<string, number> | null,
@@ -25,15 +27,17 @@ const hexToRgb = (hex: string) => {
 // the effect's accent color. Bass and treble drive the plate modes so the
 // ridges sweep and reorganize with the audio. Falls back to a gentle
 // time-driven morph when idle or when no analyser data is available.
-export function Visualizer({ isCapturing, accentColor, tabId, onFrame }: VisualizerProps) {
+export function Visualizer({ isCapturing, accentColor, tabId, intensity = 1, onFrame }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const bandsRef = useRef<number[] | null>(null)
   const accentRef = useRef(accentColor)
   const capturingRef = useRef(isCapturing)
   const onFrameRef = useRef(onFrame)
+  const intensityRef = useRef(intensity)
   accentRef.current = accentColor
   capturingRef.current = isCapturing
   onFrameRef.current = onFrame
+  intensityRef.current = intensity
 
   // Poll the offscreen document's analyser while capturing. Uses the same
   // broadcast message path as the rest of the extension, which the offscreen
@@ -146,9 +150,9 @@ export function Visualizer({ isCapturing, accentColor, tabId, onFrame }: Visuali
 
       // Mids widen the ridges; hits flash the whole field brighter
       const ridgeWidth = 0.35 + mid * 0.3
-      const baseAlpha = live
+      const baseAlpha = (live
         ? Math.min(0.4 + level * 0.6 + punchEnv * 0.25, 0.85)
-        : 0.09
+        : 0.09) * intensityRef.current
 
       // Bass swells the plate slightly; transients snap it outward
       const scale = 1 + bass * 0.04 + punchEnv * 0.05

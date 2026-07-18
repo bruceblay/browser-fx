@@ -1,10 +1,14 @@
 import { theme } from "../theme"
+import { Visualizer } from "./Visualizer"
 
 interface AboutViewProps {
   onBack: () => void
+  isCapturing: boolean
+  tabId: number | null
+  accentColor: string
 }
 
-export function AboutView({ onBack }: AboutViewProps) {
+export function AboutView({ onBack, isCapturing, tabId, accentColor }: AboutViewProps) {
   return (
     <div style={{
       height: '100%',
@@ -65,10 +69,20 @@ export function AboutView({ onBack }: AboutViewProps) {
           </button>
         </div>
 
+      {/* The cymatic field sits fixed behind the scrolling text */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <Visualizer
+          isCapturing={isCapturing}
+          accentColor={accentColor}
+          tabId={tabId}
+          intensity={0.45}
+        />
         <div style={{
-          flex: 1,
-          minHeight: 0,
+          position: 'relative',
+          zIndex: 1,
+          height: '100%',
           padding: '12px 14px',
+          boxSizing: 'border-box',
           color: theme.textDim,
           fontSize: 12,
           lineHeight: 1.6,
@@ -131,6 +145,7 @@ export function AboutView({ onBack }: AboutViewProps) {
             <li style={{ marginBottom: 6 }}>Click the power button again to stop, or ↺ to clear all audio streams</li>
           </ol>
         </div>
+      </div>
     </div>
   )
 }

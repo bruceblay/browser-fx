@@ -389,7 +389,12 @@ function IndexPopup() {
         background: theme.panel,
         fontFamily: theme.font
       }}>
-        <AboutView onBack={() => setShowAbout(false)} />
+        <AboutView
+          onBack={() => setShowAbout(false)}
+          isCapturing={isCapturing}
+          tabId={currentTabId}
+          accentColor={currentEffectConfig?.sliderColor || theme.led}
+        />
       </div>
     )
   }
