@@ -24,15 +24,6 @@ export const loopChopConfig: EffectConfig = {
       unit: 'x'
     },
     {
-      key: 'triggerMode',
-      label: 'Trigger Mode',
-      min: 0,
-      max: 1,
-      step: 1,
-      default: 0,
-      unit: '' // 0=continuous, 1=triggered
-    },
-    {
       key: 'wet',
       label: 'Dry/Wet',
       min: 0,
@@ -45,7 +36,6 @@ export const loopChopConfig: EffectConfig = {
   defaultValues: {
     loopSize: 2,        // 1/8 beat
     stutterRate: 4,     // 4x repeats
-    triggerMode: 0,     // continuous
     wet: 0.8            // 80% wet
   },
   sliderColor: '#DC143C', // Crimson for glitchy/rhythmic

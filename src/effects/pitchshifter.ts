@@ -24,15 +24,6 @@ export const pitchShifterConfig: EffectConfig = {
       unit: 's'
     },
     {
-      key: 'overlap',
-      label: 'Overlap',
-      min: 0.1,
-      max: 0.9,
-      step: 0.1,
-      default: 0.5,
-      unit: ''
-    },
-    {
       key: 'wet',
       label: 'Dry/Wet',
       min: 0,
@@ -45,7 +36,6 @@ export const pitchShifterConfig: EffectConfig = {
   defaultValues: {
     pitch: 2.0,      // +2 semitones up
     windowSize: 0.05, // 50ms window
-    overlap: 0.5,     // 50% overlap
     wet: 1.0          // 100% wet
   },
   sliderColor: '#00CED1' // Boss PS-6 turquoise

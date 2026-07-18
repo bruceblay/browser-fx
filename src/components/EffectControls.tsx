@@ -37,7 +37,7 @@ const arcPath = (cx: number, cy: number, r: number, startAngle: number, endAngle
 const formatValue = (v: number, param: ParameterConfig): string => {
   switch (param.unit) {
     case '%': return `${Math.round(v * 100)}%`
-    case 's': return `${parseFloat(v.toFixed(1))}s`
+    case 's': return v < 1 ? `${Math.round(v * 1000)}ms` : `${parseFloat(v.toFixed(1))}s`
     case 'ms': return `${Math.round(v)}ms`
     case 'Hz': return v >= 1000 ? `${parseFloat((v / 1000).toFixed(1))}kHz` : `${Math.round(v)}Hz`
     case 'dB': return `${parseFloat(v.toFixed(1))}dB`
