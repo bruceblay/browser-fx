@@ -393,7 +393,6 @@ function IndexPopup() {
           onBack={() => setShowAbout(false)}
           isCapturing={isCapturing}
           tabId={currentTabId}
-          accentColor={currentEffectConfig?.sliderColor || theme.led}
         />
       </div>
     )

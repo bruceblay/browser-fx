@@ -5,10 +5,9 @@ interface AboutViewProps {
   onBack: () => void
   isCapturing: boolean
   tabId: number | null
-  accentColor: string
 }
 
-export function AboutView({ onBack, isCapturing, tabId, accentColor }: AboutViewProps) {
+export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
   return (
     <div style={{
       height: '100%',
@@ -71,11 +70,14 @@ export function AboutView({ onBack, isCapturing, tabId, accentColor }: AboutView
 
       {/* The cymatic field sits fixed behind the scrolling text */}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        {/* Fixed chorus blue at active-state brightness, regardless of the
+            selected effect or whether audio is running */}
         <Visualizer
           isCapturing={isCapturing}
-          accentColor={accentColor}
+          accentColor="#87CEEB"
           tabId={tabId}
           intensity={1.2}
+          brightWhenIdle
         />
         <div style={{
           position: 'relative',

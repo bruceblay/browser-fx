@@ -6,6 +6,9 @@ interface VisualizerProps {
   tabId: number | null
   // Overall opacity multiplier; lower it when text sits on top
   intensity?: number
+  // Use the bright active-state alpha even without live audio (the pattern
+  // still breathes on idle motion, just at full presence)
+  brightWhenIdle?: boolean
   onFrame?: (
     effectId: string | null,
     params: Record<string, number> | null,
@@ -27,7 +30,7 @@ const hexToRgb = (hex: string) => {
 // the effect's accent color. Bass and treble drive the plate modes so the
 // ridges sweep and reorganize with the audio. Falls back to a gentle
 // time-driven morph when idle or when no analyser data is available.
-export function Visualizer({ isCapturing, accentColor, tabId, intensity = 1, onFrame }: VisualizerProps) {
+export function Visualizer({ isCapturing, accentColor, tabId, intensity = 1, brightWhenIdle = false, onFrame }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const bandsRef = useRef<number[] | null>(null)
   const accentRef = useRef(accentColor)
@@ -150,7 +153,7 @@ export function Visualizer({ isCapturing, accentColor, tabId, intensity = 1, onF
 
       // Mids widen the ridges; hits flash the whole field brighter
       const ridgeWidth = 0.35 + mid * 0.3
-      const baseAlpha = (live
+      const baseAlpha = (live || brightWhenIdle
         ? Math.min(0.4 + level * 0.6 + punchEnv * 0.25, 0.85)
         : 0.09) * intensityRef.current
 
