@@ -135,13 +135,14 @@ export function EffectControls({
                 valueMax={param.max}
                 valueRawRoundFn={(v) => Math.round(v / param.step) * param.step}
                 valueRawDisplayFn={(v) => formatValue(v, param)}
-                onValueRawChange={(v) => isCapturing && onParamUpdate(param.key, v)}
+                onValueRawChange={(v) => onParamUpdate(param.key, v)}
                 dragSensitivity={0.006}
+                axis="xy"
                 style={{
                   width: KNOB_SIZE,
                   height: KNOB_SIZE,
                   position: 'relative',
-                  cursor: isCapturing ? 'ns-resize' : 'not-allowed',
+                  cursor: 'ns-resize',
                   userSelect: 'none',
                   touchAction: 'none',
                   outline: 'none'
