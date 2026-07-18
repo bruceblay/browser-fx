@@ -1,4 +1,5 @@
 import { getEffectsList } from "../effects"
+import { theme } from "../theme"
 
 interface EffectSelectorProps {
   selectedEffect: string
@@ -7,29 +8,43 @@ interface EffectSelectorProps {
 
 export function EffectSelector({ selectedEffect, onEffectChange }: EffectSelectorProps) {
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <select
         value={selectedEffect}
         onChange={(e) => onEffectChange(e.target.value)}
         style={{
           width: '100%',
-          padding: '6px 6px',
-          borderRadius: 8,
-          background: 'rgba(255,255,255,0.1)',
-          color: 'white',
-          fontSize: 14,
+          padding: '5px 8px',
+          borderRadius: 3,
+          background: theme.control,
+          border: `1px solid ${theme.controlBorder}`,
+          color: theme.text,
+          fontSize: 12,
+          fontWeight: 500,
+          fontFamily: 'inherit',
           cursor: 'pointer',
           outline: 'none',
-          backdropFilter: 'blur(10px)',
-          border: 0
+          appearance: 'none',
+          WebkitAppearance: 'none'
         }}
       >
         {getEffectsList().map(effect => (
-          <option key={effect.id} value={effect.id} style={{ background: '#333', color: 'white' }}>
+          <option key={effect.id} value={effect.id} style={{ background: theme.control, color: theme.text }}>
             {effect.name}
           </option>
         ))}
       </select>
+      <span style={{
+        position: 'absolute',
+        right: 8,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        pointerEvents: 'none',
+        fontSize: 8,
+        color: theme.textDim
+      }}>
+        ▼
+      </span>
     </div>
   )
 }

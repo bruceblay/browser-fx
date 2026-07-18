@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import "./fonts.css"
 import { Header } from "./components/Header"
 import { EffectSelector } from "./components/EffectSelector"
 import { EffectControls } from "./components/EffectControls"
-import { ActionButtons } from "./components/ActionButtons"
 import { AboutView } from "./components/AboutView"
 import { getEffectConfig, getEffectDefaults } from "./effects"
+import { theme } from "./theme"
 
 function IndexPopup() {
   const [isCapturing, setIsCapturing] = useState(false)
@@ -18,11 +18,11 @@ function IndexPopup() {
 
   const currentEffectConfig = getEffectConfig(selectedEffect)
 
-  // Dynamically adjust popup height based on number of parameters
+  // Dynamically adjust popup height based on number of knob rows
   useEffect(() => {
     const paramCount = currentEffectConfig?.parameters?.length || 0
-    // Base height (310px for 3 params) + additional height per extra param
-    const height = paramCount <= 3 ? 300 : 400
+    // Up to 4 knobs fit in a single row; two rows need the taller popup
+    const height = showAbout ? 600 : paramCount <= 4 ? 260 : 360
 
     // Reset height first to allow shrinking
     document.body.style.height = 'auto'
@@ -33,7 +33,7 @@ function IndexPopup() {
       document.body.style.height = `${height}px`
       document.body.style.minHeight = `${height}px`
     })
-  }, [currentEffectConfig])
+  }, [currentEffectConfig, showAbout])
 
   // Load saved state on component mount
   useEffect(() => {
@@ -51,8 +51,16 @@ function IndexPopup() {
 
           if (savedState) {
             console.log("Loading saved state for tab", activeTab.id, savedState)
-            setSelectedEffect(savedState.selectedEffect || "bitcrusher")
-            setEffectParams(savedState.effectParams || getEffectDefaults(savedState.selectedEffect || "bitcrusher"))
+            // Fall back to the default effect if the saved one no longer exists
+            const savedEffect = savedState.selectedEffect
+            const effectExists = savedEffect && getEffectConfig(savedEffect)
+            const effectId = effectExists ? savedEffect : "bitcrusher"
+            setSelectedEffect(effectId)
+            setEffectParams(
+              effectExists && savedState.effectParams
+                ? savedState.effectParams
+                : getEffectDefaults(effectId)
+            )
             setIsCapturing(savedState.isCapturing || false)
           }
         }
@@ -86,16 +94,18 @@ function IndexPopup() {
     saveState()
   }, [currentTabId, selectedEffect, effectParams, isCapturing])
 
-  // Remove body margin and set gradient background
+  // Remove body margin and set background behind the device panel
   useEffect(() => {
     document.body.style.margin = '0'
     document.body.style.padding = '0'
-    document.body.style.background = '#111'
+    document.body.style.background = theme.panel
+    document.body.style.overflow = 'hidden'
 
     return () => {
       document.body.style.margin = ''
       document.body.style.padding = ''
       document.body.style.background = ''
+      document.body.style.overflow = ''
     }
   }, [])
 
@@ -126,7 +136,16 @@ function IndexPopup() {
     }
   }
 
+  // Blocks stop/start toggling while a START_CAPTURE is still in flight.
+  // Without this, a double-click on the power LED fires start then stop, and
+  // the short stop path can outrun the long start path: STOP_STREAM reaches
+  // the offscreen document before PROCESS_STREAM, so audio ends up running
+  // while the UI shows the off state.
+  const startPending = useRef(false)
+
   const handleStartCapture = () => {
+    if (startPending.current) return
+    startPending.current = true
     setIsCapturing(true)
 
     // Set a timeout to handle message port issues
@@ -139,6 +158,7 @@ function IndexPopup() {
       effectId: selectedEffect,
       params: effectParams
     }, (response) => {
+      startPending.current = false
       clearTimeout(timeoutId)
 
       if (chrome.runtime.lastError) {
@@ -164,6 +184,7 @@ function IndexPopup() {
   }
 
   const handleStopCapture = () => {
+    if (startPending.current) return
     setIsCapturing(false)
     chrome.runtime.sendMessage({
       type: "STOP_CAPTURE"
@@ -179,66 +200,62 @@ function IndexPopup() {
 
   if (showAbout) {
     return (
-      <div style={{ width: 380, minHeight: 600, padding: 0, background: 'transparent' }}>
+      <div style={{
+        width: 380,
+        height: 600,
+        background: theme.panel,
+        fontFamily: theme.font
+      }}>
         <AboutView onBack={() => setShowAbout(false)} />
       </div>
     )
   }
 
   const paramCount = currentEffectConfig?.parameters?.length || 0
-  const popupHeight = paramCount <= 3 ? 300 : 400
+  const popupHeight = paramCount <= 4 ? 260 : 360
 
   return (
     <div style={{
       width: 380,
       height: popupHeight,
-      padding: 0,
-      background: 'transparent',
-      fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      color: '#fff',
+      boxSizing: 'border-box',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      background: theme.panel,
+      fontFamily: theme.font,
+      color: theme.text
     }}>
+      <Header
+        onInfoClick={() => setShowAbout(true)}
+        onClearClick={handleClearStreams}
+        isCapturing={isCapturing}
+        onPowerToggle={isCapturing ? handleStopCapture : handleStartCapture}
+      />
+
       <div style={{
-        padding: '14px 18px',
-        height: `${popupHeight}px`,
-        boxSizing: 'border-box',
+        flex: 1,
+        padding: '12px 14px',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        minHeight: 0
       }}>
-        <Header onInfoClick={() => setShowAbout(true)} />
+        <EffectSelector
+          selectedEffect={selectedEffect}
+          onEffectChange={handleEffectChange}
+        />
 
-        <div style={{ marginTop: 16 }}>
-          {/* <label style={{
-            display: 'block',
-            marginBottom: 8,
-            fontSize: 14,
-            fontWeight: 500,
-            color: 'rgba(255,255,255,0.9)'
-          }}>
-            Select Effect
-          </label> */}
-          <EffectSelector
-            selectedEffect={selectedEffect}
-            onEffectChange={handleEffectChange}
-          />
-        </div>
-
-        <div>
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          minHeight: 0,
+          padding: '8px 0'
+        }}>
           <EffectControls
             effectConfig={currentEffectConfig}
             effectParams={effectParams}
             isCapturing={isCapturing}
             onParamUpdate={handleParamUpdate}
-          />
-        </div>
-
-        <div style={{ marginTop: 4 }}>
-          <ActionButtons
-            isCapturing={isCapturing}
-            onCapture={handleStartCapture}
-            onStop={handleStopCapture}
-            onClearStreams={handleClearStreams}
+            onStart={handleStartCapture}
           />
         </div>
       </div>

@@ -47,7 +47,7 @@ export const lofiTapeConfig: EffectConfig = {
       min: 0,
       max: 1,
       step: 0.01,
-      default: 0.1,
+      default: 0,
       unit: '%'
     },
     {
@@ -65,7 +65,7 @@ export const lofiTapeConfig: EffectConfig = {
     flutterRate: 6.0,
     saturation: 0.4,
     toneRolloff: 6000,
-    noise: 0.1,
+    noise: 0,
     wet: 0.8
   },
   sliderColor: '#D2691E'

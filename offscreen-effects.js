@@ -1765,7 +1765,7 @@ function createLofiTape(context, params, tabLiveParams) {
   tabLiveParams.flutterRate = params.flutterRate || 6.0
   tabLiveParams.saturation = params.saturation !== undefined ? params.saturation : 0.4
   tabLiveParams.toneRolloff = params.toneRolloff || 6000
-  tabLiveParams.noise = params.noise !== undefined ? params.noise : 0.1
+  tabLiveParams.noise = params.noise !== undefined ? params.noise : 0
   tabLiveParams.wet = params.wet !== undefined ? params.wet : 0.8
 
   const inputGain = context.createGain()
@@ -1790,7 +1790,7 @@ function createLofiTape(context, params, tabLiveParams) {
   flutterLfo.type = 'sine'
   flutterLfo.frequency.value = tabLiveParams.flutterRate
   const flutterGain = context.createGain()
-  flutterGain.gain.value = tabLiveParams.wowDepth * 0.0008 // very subtle
+  flutterGain.gain.value = 0.0003 // fixed subtle depth, independent of wow
 
   // Connect LFOs to delay modulation
   wowLfo.connect(wowGain)
@@ -1805,10 +1805,14 @@ function createLofiTape(context, params, tabLiveParams) {
   const curveLength = 44100
   const curve = new Float32Array(curveLength)
   function updateSaturationCurve() {
-    const drive = 1 + tabLiveParams.saturation * 4 // 1x to 5x drive
+    // Blend between identity and normalized tanh so saturation=0 is fully
+    // transparent and higher settings keep a consistent output level
+    const sat = tabLiveParams.saturation
+    const drive = 1 + sat * 4 // 1x to 5x drive
+    const norm = Math.tanh(drive)
     for (let i = 0; i < curveLength; i++) {
       const x = (i * 2) / curveLength - 1
-      curve[i] = Math.tanh(x * drive)
+      curve[i] = (1 - sat) * x + (sat * Math.tanh(x * drive)) / norm
     }
     waveshaper.curve = curve
   }
@@ -1834,7 +1838,7 @@ function createLofiTape(context, params, tabLiveParams) {
   noiseSource.buffer = noiseBuffer
   noiseSource.loop = true
 
-  // Shape the noise to sound more like tape hiss (high-pass + bandpass)
+  // Shape the noise to sound more like tape hiss (high-pass above 2kHz)
   const noiseHPF = context.createBiquadFilter()
   noiseHPF.type = 'highpass'
   noiseHPF.frequency.value = 2000
@@ -2397,9 +2401,8 @@ function updateEffectParams(effectId, params) {
         currentEffect.input._wetGain.gain.value = liveParams.wet
         currentEffect.input._dryGain.gain.value = 1 - liveParams.wet
       }
-      if (params.wowDepth !== undefined) {
-        if (currentEffect.input._wowGain) currentEffect.input._wowGain.gain.value = liveParams.wowDepth * 0.003
-        if (currentEffect.input._flutterGain) currentEffect.input._flutterGain.gain.value = liveParams.wowDepth * 0.0008
+      if (params.wowDepth !== undefined && currentEffect.input._wowGain) {
+        currentEffect.input._wowGain.gain.value = liveParams.wowDepth * 0.003
       }
       if (params.flutterRate !== undefined && currentEffect.input._flutterLfo) {
         currentEffect.input._flutterLfo.frequency.value = liveParams.flutterRate
@@ -2753,9 +2756,8 @@ function updateEffectParamsForTab(effectId, params, tabId) {
         smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
-      if (params.wowDepth !== undefined) {
-        if (state.currentEffect.input._wowGain) smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.003, 0.02)
-        if (state.currentEffect.input._flutterGain) smoothParamChange(state.currentEffect.input._flutterGain.gain, state.liveParams.wowDepth * 0.0008, 0.02)
+      if (params.wowDepth !== undefined && state.currentEffect.input._wowGain) {
+        smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.003, 0.02)
       }
       if (params.flutterRate !== undefined && state.currentEffect.input._flutterLfo) {
         smoothParamChange(state.currentEffect.input._flutterLfo.frequency, state.liveParams.flutterRate, 0.02)
@@ -2859,34 +2861,41 @@ function cleanup() {
 }
 
 // Listen for messages
-chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+// IMPORTANT: this listener must NOT be async. An async listener returns a
+// Promise instead of the literal `true` Chrome needs to keep the response
+// port open, so any sendResponse after an await races the port teardown and
+// the sender sees "message port closed" even though processing succeeded.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("🎵 MULTI-EFFECT OFFSCREEN received message:", message.type, message)
   console.log("🎵 MESSAGE RECEIVED - OFFSCREEN IS WORKING!")
 
   if (message.type === "PROCESS_STREAM") {
-    try {
-      console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, effectId=${message.effectId}, params=`, message.params)
+    console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, effectId=${message.effectId}, params=`, message.params)
 
-      // Get tab state
-      const tabId = message.tabId
-      const state = getTabState(tabId)
+    // Get tab state
+    const tabId = message.tabId
+    const state = getTabState(tabId)
 
-      // Set the effect for this tab
-      state.currentEffectId = message.effectId || 'bitcrusher'
-      state.currentEffectParams = message.params || {}
-      console.log(`🎵 AFTER SETTING for tab ${tabId}: currentEffectId=${state.currentEffectId}, currentEffectParams=`, state.currentEffectParams)
+    // Set the effect for this tab
+    state.currentEffectId = message.effectId || 'bitcrusher'
+    state.currentEffectParams = message.params || {}
+    console.log(`🎵 AFTER SETTING for tab ${tabId}: currentEffectId=${state.currentEffectId}, currentEffectParams=`, state.currentEffectParams)
 
-      await processAudioStreamForTab(message.streamId, tabId)
-      sendResponse({ success: true, message: "Stream processing started" })
-    } catch (error) {
-      console.error("🎵 Error processing stream:", error)
-      sendResponse({ success: false, error: error.message })
-    }
+    processAudioStreamForTab(message.streamId, tabId)
+      .then(() => {
+        sendResponse({ success: true, message: "Stream processing started" })
+      })
+      .catch((error) => {
+        console.error("🎵 Error processing stream:", error)
+        sendResponse({ success: false, error: error.message })
+      })
+    return true // response is sent asynchronously, keep the port open
   }
 
   if (message.type === "STOP_PROCESSING") {
     cleanup()
     sendResponse({ success: true, message: "Processing stopped" })
+    return
   }
 
   if (message.type === "STOP_STREAM") {
@@ -2898,6 +2907,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.warn("🎵 STOP_STREAM received without tabId")
     }
     sendResponse({ success: true, message: "Stream stopped" })
+    return
   }
 
   if (message.type === "CLEAR_ALL_STREAMS") {
@@ -2907,6 +2917,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
     console.log("🎵 All streams cleared")
     sendResponse({ success: true, message: "All streams cleared" })
+    return
   }
 
   if (message.type === "UPDATE_EFFECT_PARAMS") {
@@ -2918,6 +2929,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.warn("🎵 UPDATE_EFFECT_PARAMS received without tabId")
     }
     sendResponse({ success: true, message: "Parameters updated" })
+    return
   }
 
   if (message.type === "SWITCH_EFFECT") {
@@ -2929,9 +2941,11 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.warn("🎵 SWITCH_EFFECT received without tabId")
     }
     sendResponse({ success: true, message: `Switched to ${message.effectId}` })
+    return
   }
 
-  return true
+  // Unknown message (e.g. popup-to-background traffic like START_CAPTURE):
+  // don't respond and don't hold the port, so the real recipient's response wins
 })
 
 console.log("🎵 Multi-effect offscreen document ready and listening for messages")
