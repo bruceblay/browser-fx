@@ -1,26 +1,12 @@
-# Tab Bitcrusher
+# Browser FX
 
-A Chrome extension that applies real-time audio effects (delay, bitcrusher, phaser) to individual browser tabs using Web Audio API and Chrome's Tab Capture API.
+Real-time audio effects for any browser tab: 22 effects with studio-style
+knobs, an audio-reactive cymatic visualizer, and MIDI controller support.
+Built with the Web Audio API and Chrome's Tab Capture API.
 
-## 🚧 Development Status
-
-**Current Phase**: Phase 1 Complete - Foundation & Basic Tab Capture
-
-### ✅ Phase 1 Completed Features:
-- Plasmo MV3 extension framework setup with TypeScript
-- Chrome Tab Capture API integration
-- Offscreen document for stable Web Audio processing
-- Basic popup UI with capture controls
-- Service worker with tab audio capture functionality
-- Audio passthrough (no effects applied yet)
-
-### 🔄 Next Phases:
-- **Phase 2**: Audio routing through Web Audio API with playback
-- **Phase 3**: First effect implementation (Delay)
-- **Phase 4**: Multi-tab support
-- **Phase 5**: Bitcrusher effect with custom AudioWorklet
-- **Phase 6**: Phaser effect and complete effect chain
-- **Phase 7**: Production polish and UX enhancements
+- **Install**: [Chrome Web Store](https://chromewebstore.google.com/detail/browser-fx/oanepaeodkjbadgpgkolbidpbflbmmmd)
+- **Demo video**: [YouTube](https://www.youtube.com/watch?v=2FvHIQayIIM)
+- **Feature ideas**: [docs/future-features.md](docs/future-features.md)
 
 ## 🛠️ Development Setup
 
