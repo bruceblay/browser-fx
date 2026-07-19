@@ -1,8 +1,8 @@
 {
   "name": "browser-fx",
-  "displayName": "Browser FX",
+  "displayName": "Browser FX: Tab Audio Effects + MIDI",
   "version": "0.0.4",
-  "description": "Chrome extension that applies real-time audio effects to browser tabs",
+  "description": "Real-time audio effects for any tab: reverb, filter, EQ, bitcrusher, delay + 17 more. MIDI control, per-tab settings, no account.",
   "author": "Bruce Blay <bruceblay@gmail.com>",
   "contributors": [
     {
