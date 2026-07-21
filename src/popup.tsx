@@ -529,13 +529,14 @@ function IndexPopup() {
       onClick={handleAddSlot}
       title="Add another effect to the chain"
       style={{
-        background: 'none',
-        border: `1px dashed ${theme.controlBorder}`,
+        background: theme.control,
+        border: '1px dashed #3f3f3f',
         borderRadius: 3,
-        padding: '3px 14px',
+        padding: '4px 16px',
         fontFamily: 'inherit',
         fontSize: 10,
-        color: theme.textFaint,
+        fontWeight: 600,
+        color: theme.textDim,
         textTransform: 'lowercase',
         letterSpacing: '0.4px',
         cursor: 'pointer',
@@ -544,15 +545,15 @@ function IndexPopup() {
         transition: 'color 0.15s ease, border-color 0.15s ease'
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.color = theme.textDim
-        e.currentTarget.style.borderColor = '#3a3a3a'
+        e.currentTarget.style.color = theme.text
+        e.currentTarget.style.borderColor = '#555'
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.color = theme.textFaint
-        e.currentTarget.style.borderColor = theme.controlBorder
+        e.currentTarget.style.color = theme.textDim
+        e.currentTarget.style.borderColor = '#3f3f3f'
       }}
     >
-      + add effect
+      <span style={{ color: theme.led, paddingRight: 4 }}>+</span>add effect
     </button>
   )
 
