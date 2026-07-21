@@ -10,8 +10,7 @@ interface VisualizerProps {
   // still breathes on idle motion, just at full presence)
   brightWhenIdle?: boolean
   onFrame?: (
-    effectId: string | null,
-    params: Record<string, number> | null,
+    chain: Array<{ effectId: string; params: Record<string, number> }> | null,
     midi: { status: string; lastEvent: string } | null
   ) => void
 }
@@ -59,7 +58,7 @@ export function Visualizer({ isCapturing, accentColor, tabId, intensity = 1, bri
           if (!cancelled) {
             bandsRef.current = !err && response?.bands ? response.bands : null
             if (!err && response) {
-              onFrameRef.current?.(response.effectId ?? null, response.params ?? null, response.midi ?? null)
+              onFrameRef.current?.(response.chain ?? null, response.midi ?? null)
             }
           }
         })

@@ -6,21 +6,16 @@ interface EffectControlsProps {
   effectConfig: EffectConfig | null
   effectParams: Record<string, number>
   isCapturing: boolean
-  startFailed: boolean
+  // Knob diameter in px; shrinks as the chain grows to save vertical space
+  knobSize: number
+  // MIDI learn UI renders only where this is true (slot 1 of the chain)
   midiLearn: boolean
   midiLearnTarget: number | null
   midiMappings: Record<string, number>
-  midiStatus: string
   onArmKnob: (index: number) => void
-  onMidiReset: () => void
   onParamUpdate: (param: string, value: number) => void
-  onStart: () => void
 }
 
-const KNOB_SIZE = 68
-const ARC_RADIUS = 30
-const ARC_STROKE = 3.5
-const FACE_SIZE = 46
 const ANGLE_MIN = -135
 const ANGLE_MAX = 135
 
@@ -60,287 +55,191 @@ export function EffectControls({
   effectConfig,
   effectParams,
   isCapturing,
-  startFailed,
+  knobSize,
   midiLearn,
   midiLearnTarget,
   midiMappings,
-  midiStatus,
   onArmKnob,
-  onMidiReset,
-  onParamUpdate,
-  onStart
+  onParamUpdate
 }: EffectControlsProps) {
   if (!effectConfig) {
     return null
   }
 
-  const center = KNOB_SIZE / 2
+  // All dimensions derive from the knob size (68 is the full-size reference)
+  const K = knobSize
+  const scale = K / 68
+  const arcRadius = 30 * scale
+  const arcStroke = Math.max(2.5, 3.5 * scale)
+  const face = 46 * scale
+  const center = K / 2
+  const valueFont = K >= 62 ? 10 : K >= 50 ? 9 : 8
+  const labelFont = K >= 62 ? 11 : 10
+  const tickHeight = Math.max(5, 7 * scale)
   const accent = effectConfig.sliderColor
 
   return (
     <div style={{
-      width: '100%',
-      height: '100%',
       display: 'flex',
-      flexDirection: 'column'
+      flexWrap: 'wrap',
+      gap: '10px 8px',
+      justifyContent: 'space-evenly',
+      width: '100%'
     }}>
-      {/* Lighter top spacer keeps the knobs closer to the selector. Learn
-          mode grows it so the instruction line floats with air around it. */}
-      <div style={{
-        flex: midiLearn ? 1.2 : 0.5,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        {midiLearn && (
-          <span style={{
-            fontSize: 10,
-            color: theme.led,
-            textTransform: 'lowercase',
-            letterSpacing: '0.3px',
-            userSelect: 'none'
-          }}>
-            {midiLearnTarget === null
-              ? 'click a knob, then move a control on your midi device'
-              : 'now move a control on your midi device...'}
-          </span>
-        )}
-      </div>
+      {effectConfig.parameters.map((param, paramIndex) => {
+        const currentValue = effectParams[param.key] ?? param.default
+        const value01 = mapTo01(currentValue, param.min, param.max)
+        const valueAngle = ANGLE_MIN + value01 * (ANGLE_MAX - ANGLE_MIN)
+        const armed = midiLearn && midiLearnTarget === paramIndex
+        const mappedCc = Object.keys(midiMappings).find(cc => midiMappings[cc] === paramIndex)
 
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '14px 10px',
-        justifyContent: 'space-evenly'
-      }}>
-        {effectConfig.parameters.map((param, paramIndex) => {
-          const currentValue = effectParams[param.key] ?? param.default
-          const value01 = mapTo01(currentValue, param.min, param.max)
-          const valueAngle = ANGLE_MIN + value01 * (ANGLE_MAX - ANGLE_MIN)
-          const armed = midiLearn && midiLearnTarget === paramIndex
-          const mappedCc = Object.keys(midiMappings).find(cc => midiMappings[cc] === paramIndex)
-
-          return (
-            <div key={param.key} style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              minWidth: 76,
-              position: 'relative'
-            }}>
-              <KnobHeadless
-                aria-label={param.label}
-                valueRaw={currentValue}
-                valueMin={param.min}
-                valueMax={param.max}
-                valueRawRoundFn={(v) => Math.round(v / param.step) * param.step}
-                valueRawDisplayFn={(v) => formatValue(v, param)}
-                onValueRawChange={(v) => onParamUpdate(param.key, v)}
-                dragSensitivity={0.006}
-                axis="xy"
-                style={{
-                  width: KNOB_SIZE,
-                  height: KNOB_SIZE,
-                  position: 'relative',
-                  cursor: 'ns-resize',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                  outline: 'none'
-                }}
-              >
-                {/* Value arc */}
-                <svg
-                  width={KNOB_SIZE}
-                  height={KNOB_SIZE}
-                  style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-                >
-                  <path
-                    d={arcPath(center, center, ARC_RADIUS, ANGLE_MIN, ANGLE_MAX)}
-                    stroke={theme.knobTrack}
-                    strokeWidth={ARC_STROKE}
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                  {value01 > 0.001 && (
-                    <path
-                      d={arcPath(center, center, ARC_RADIUS, ANGLE_MIN, valueAngle)}
-                      stroke={isCapturing ? accent : `${accent}59`}
-                      strokeWidth={ARC_STROKE}
-                      strokeLinecap="round"
-                      fill="none"
-                    />
-                  )}
-                </svg>
-
-                {/* Cream knob face */}
-                <div style={{
-                  position: 'absolute',
-                  width: FACE_SIZE,
-                  height: FACE_SIZE,
-                  left: (KNOB_SIZE - FACE_SIZE) / 2,
-                  top: (KNOB_SIZE - FACE_SIZE) / 2,
-                  borderRadius: '50%',
-                  background: theme.cream,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.5), inset 0 -1px 2px rgba(0,0,0,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: '#1c1c1c',
-                    fontVariantNumeric: 'tabular-nums',
-                    pointerEvents: 'none',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {formatValue(currentValue, param)}
-                  </span>
-                </div>
-
-                {/* Indicator tick on the knob face edge */}
-                <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  transform: `rotate(${valueAngle}deg)`,
-                  pointerEvents: 'none'
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    width: 2,
-                    height: 7,
-                    background: theme.knobIndicator,
-                    top: (KNOB_SIZE - FACE_SIZE) / 2 + 1,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    borderRadius: 1
-                  }} />
-                </div>
-              </KnobHeadless>
-
-              {/* MIDI learn overlay: click to arm this knob for the next CC */}
-              {midiLearn && (
-                <div
-                  onClick={() => onArmKnob(paramIndex)}
-                  title="Click, then move a control on your MIDI device"
-                  style={{
-                    position: 'absolute',
-                    top: -4,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: KNOB_SIZE + 8,
-                    height: KNOB_SIZE + 8,
-                    borderRadius: '50%',
-                    border: `1.5px ${armed ? 'solid' : 'dashed'} ${theme.led}`,
-                    boxShadow: armed ? `0 0 8px ${theme.ledGlow}` : 'none',
-                    cursor: 'pointer',
-                    zIndex: 2,
-                    boxSizing: 'border-box'
-                  }}
-                />
-              )}
-
-              <label style={{
-                marginTop: 5,
-                fontSize: 11,
-                fontWeight: 500,
-                color: theme.textDim,
-                textTransform: 'lowercase',
-                letterSpacing: '0.3px',
-                textAlign: 'center',
-                userSelect: 'none'
-              }}>
-                {param.label}
-              </label>
-
-              {midiLearn && mappedCc !== undefined && (
-                <span style={{
-                  marginTop: 2,
-                  fontSize: 9,
-                  color: theme.led,
-                  letterSpacing: '0.4px',
-                  userSelect: 'none'
-                }}>
-                  cc {mappedCc}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Hint sits centered in the leftover space below the knobs */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        {midiLearn ? (
-          <span style={{
+        return (
+          <div key={param.key} style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 3,
-            fontSize: 10,
-            textTransform: 'lowercase',
-            letterSpacing: '0.3px',
-            userSelect: 'none'
+            minWidth: K + 12,
+            position: 'relative'
           }}>
-            {/* Live engine status while capturing, for troubleshooting */}
-            {midiStatus && (
-              <span style={{ color: theme.textFaint, fontSize: 9 }}>
-                midi: {midiStatus}
-              </span>
-            )}
-            <button
-              onClick={onMidiReset}
-              title="Clear all MIDI mappings and open the setup page"
+            <KnobHeadless
+              aria-label={param.label}
+              valueRaw={currentValue}
+              valueMin={param.min}
+              valueMax={param.max}
+              valueRawRoundFn={(v) => Math.round(v / param.step) * param.step}
+              valueRawDisplayFn={(v) => formatValue(v, param)}
+              onValueRawChange={(v) => onParamUpdate(param.key, v)}
+              dragSensitivity={0.006}
+              axis="xy"
               style={{
-                background: 'none',
-                border: 'none',
-                padding: '2px 6px',
-                fontFamily: 'inherit',
-                fontSize: 9,
-                color: theme.textFaint,
-                textTransform: 'lowercase',
-                letterSpacing: '0.3px',
-                textDecoration: 'underline',
-                cursor: 'pointer',
-                userSelect: 'none'
+                width: K,
+                height: K,
+                position: 'relative',
+                cursor: 'ns-resize',
+                userSelect: 'none',
+                touchAction: 'none',
+                outline: 'none'
               }}
-              onMouseOver={(e) => { e.currentTarget.style.color = theme.textDim }}
-              onMouseOut={(e) => { e.currentTarget.style.color = theme.textFaint }}
             >
-              reset midi + open setup
-            </button>
-          </span>
-        ) : !isCapturing && (
-          <button
-            onClick={onStart}
-            title="Start audio capture"
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '4px 8px',
-              fontFamily: 'inherit',
-              fontSize: 10,
-              color: startFailed ? '#e0796a' : theme.textFaint,
+              {/* Value arc */}
+              <svg
+                width={K}
+                height={K}
+                style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+              >
+                <path
+                  d={arcPath(center, center, arcRadius, ANGLE_MIN, ANGLE_MAX)}
+                  stroke={theme.knobTrack}
+                  strokeWidth={arcStroke}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                {value01 > 0.001 && (
+                  <path
+                    d={arcPath(center, center, arcRadius, ANGLE_MIN, valueAngle)}
+                    stroke={isCapturing ? accent : `${accent}59`}
+                    strokeWidth={arcStroke}
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                )}
+              </svg>
+
+              {/* Cream knob face */}
+              <div style={{
+                position: 'absolute',
+                width: face,
+                height: face,
+                left: (K - face) / 2,
+                top: (K - face) / 2,
+                borderRadius: '50%',
+                background: theme.cream,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.5), inset 0 -1px 2px rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <span style={{
+                  fontSize: valueFont,
+                  fontWeight: 600,
+                  color: '#1c1c1c',
+                  fontVariantNumeric: 'tabular-nums',
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {formatValue(currentValue, param)}
+                </span>
+              </div>
+
+              {/* Indicator tick on the knob face edge */}
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                transform: `rotate(${valueAngle}deg)`,
+                pointerEvents: 'none'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  width: 2,
+                  height: tickHeight,
+                  background: theme.knobIndicator,
+                  top: (K - face) / 2 + 1,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  borderRadius: 1
+                }} />
+              </div>
+            </KnobHeadless>
+
+            {/* MIDI learn overlay: click to arm this knob for the next CC */}
+            {midiLearn && (
+              <div
+                onClick={() => onArmKnob(paramIndex)}
+                title="Click, then move a control on your MIDI device"
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: K + 8,
+                  height: K + 8,
+                  borderRadius: '50%',
+                  border: `1.5px ${armed ? 'solid' : 'dashed'} ${theme.led}`,
+                  boxShadow: armed ? `0 0 8px ${theme.ledGlow}` : 'none',
+                  cursor: 'pointer',
+                  zIndex: 2,
+                  boxSizing: 'border-box'
+                }}
+              />
+            )}
+
+            <label style={{
+              marginTop: 4,
+              fontSize: labelFont,
+              fontWeight: 500,
+              color: theme.textDim,
               textTransform: 'lowercase',
               letterSpacing: '0.3px',
-              cursor: 'pointer',
-              userSelect: 'none',
-              transition: 'color 0.15s ease'
-            }}
-            onMouseOver={(e) => { e.currentTarget.style.color = startFailed ? '#eda093' : theme.textDim }}
-            onMouseOut={(e) => { e.currentTarget.style.color = startFailed ? '#e0796a' : theme.textFaint }}
-          >
-            {startFailed
-              ? <>capture failed, press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to retry</>
-              : <>press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to start</>}
-          </button>
-        )}
-      </div>
+              textAlign: 'center',
+              userSelect: 'none'
+            }}>
+              {param.label}
+            </label>
+
+            {midiLearn && mappedCc !== undefined && (
+              <span style={{
+                marginTop: 2,
+                fontSize: 9,
+                color: theme.led,
+                letterSpacing: '0.4px',
+                userSelect: 'none'
+              }}>
+                cc {mappedCc}
+              </span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

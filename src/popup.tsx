@@ -8,12 +8,24 @@ import { AboutView } from "./components/AboutView"
 import { getEffectConfig, getEffectDefaults } from "./effects"
 import { theme } from "./theme"
 
+type ChainSlot = {
+  effectId: string
+  params: Record<string, number>
+}
+
+const MAX_CHAIN = 4
+// Knobs shrink as the chain grows to conserve vertical space
+const KNOB_SIZES = [68, 56, 48, 44]
+const POPUP_HEIGHTS = [260, 335, 435, 535]
+
+const defaultSlot = (effectId: string): ChainSlot => ({
+  effectId,
+  params: getEffectDefaults(effectId)
+})
+
 function IndexPopup() {
   const [isCapturing, setIsCapturing] = useState(false)
-  const [selectedEffect, setSelectedEffect] = useState("bitcrusher")
-  const [effectParams, setEffectParams] = useState<Record<string, number>>(() =>
-    getEffectDefaults("bitcrusher")
-  )
+  const [chain, setChain] = useState<ChainSlot[]>([defaultSlot("bitcrusher")])
   const [showAbout, setShowAbout] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
   const [startFailed, setStartFailed] = useState(false)
@@ -27,58 +39,75 @@ function IndexPopup() {
   // so the UI doesn't fight the user's hand
   const lastLocalEditRef = useRef(0)
 
-  const currentEffectConfig = getEffectConfig(selectedEffect)
+  const single = chain.length === 1
+  const knobSize = KNOB_SIZES[chain.length - 1]
+  const popupHeight = POPUP_HEIGHTS[chain.length - 1]
 
-  // Knob order and ranges for the active effect, sent to the offscreen
-  // document so MIDI CC values can be scaled onto the right parameters
+  // Knob order and ranges for an effect, sent to the offscreen document so
+  // MIDI CC values can be scaled onto the right parameters
   const paramSpecsFor = (effectId: string) =>
     getEffectConfig(effectId)?.parameters.map(p => ({
       key: p.key, min: p.min, max: p.max, step: p.step
     }))
 
-  // Dynamically adjust popup height based on number of knob rows
+  const chainWithSpecs = (c: ChainSlot[]) =>
+    c.map(s => ({ effectId: s.effectId, params: s.params, paramSpecs: paramSpecsFor(s.effectId) }))
+
+  const sendChain = (c: ChainSlot[]) => {
+    chrome.runtime.sendMessage({ type: "SET_CHAIN", chain: chainWithSpecs(c) })
+  }
+
+  // Dynamically adjust popup height to the chain length
   useEffect(() => {
-    const paramCount = currentEffectConfig?.parameters?.length || 0
-    // Up to 4 knobs fit in a single row; two rows need the taller popup
-    const height = showAbout ? 600 : paramCount <= 4 ? 260 : 360
+    const height = showAbout ? 600 : popupHeight
 
     // Reset height first to allow shrinking
     document.body.style.height = 'auto'
     document.body.style.minHeight = 'auto'
 
-    // Then set the new height
     requestAnimationFrame(() => {
       document.body.style.height = `${height}px`
       document.body.style.minHeight = `${height}px`
     })
-  }, [currentEffectConfig, showAbout])
+  }, [popupHeight, showAbout])
 
   // Load saved state on component mount
   useEffect(() => {
     const loadSavedState = async () => {
       try {
-        // Get current tab ID
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
         if (activeTab.id) {
           setCurrentTabId(activeTab.id)
 
-          // Load saved state for this tab
           const storageKey = `tabState_${activeTab.id}`
           const result = await chrome.storage.local.get([storageKey])
           const savedState = result[storageKey]
 
           if (savedState) {
             console.log("Loading saved state for tab", activeTab.id, savedState)
-            // Fall back to the default effect if the saved one no longer exists
-            const savedEffect = savedState.selectedEffect
-            const effectExists = savedEffect && getEffectConfig(savedEffect)
-            const effectId = effectExists ? savedEffect : "bitcrusher"
-            setSelectedEffect(effectId)
-            setEffectParams(
-              effectExists && savedState.effectParams
-                ? savedState.effectParams
-                : getEffectDefaults(effectId)
-            )
+
+            if (Array.isArray(savedState.chain)) {
+              // Drop slots whose effect no longer exists
+              const valid = savedState.chain
+                .filter((s: any) => s && getEffectConfig(s.effectId))
+                .slice(0, MAX_CHAIN)
+                .map((s: any) => ({
+                  effectId: s.effectId,
+                  params: s.params || getEffectDefaults(s.effectId)
+                }))
+              if (valid.length) setChain(valid)
+            } else if (savedState.selectedEffect) {
+              // Migrate the old single-effect state shape
+              const effectExists = getEffectConfig(savedState.selectedEffect)
+              const effectId = effectExists ? savedState.selectedEffect : "bitcrusher"
+              setChain([{
+                effectId,
+                params: effectExists && savedState.effectParams
+                  ? savedState.effectParams
+                  : getEffectDefaults(effectId)
+              }])
+            }
+
             setIsCapturing(savedState.isCapturing || false)
 
             // Saved state can claim "capturing" after an extension reload
@@ -109,13 +138,7 @@ function IndexPopup() {
       if (currentTabId) {
         try {
           const storageKey = `tabState_${currentTabId}`
-          const stateToSave = {
-            selectedEffect,
-            effectParams,
-            isCapturing
-          }
-          await chrome.storage.local.set({ [storageKey]: stateToSave })
-          console.log("Saved state for tab", currentTabId, stateToSave)
+          await chrome.storage.local.set({ [storageKey]: { chain, isCapturing } })
         } catch (error) {
           console.error("Failed to save state:", error)
         }
@@ -123,7 +146,7 @@ function IndexPopup() {
     }
 
     saveState()
-  }, [currentTabId, selectedEffect, effectParams, isCapturing])
+  }, [currentTabId, chain, isCapturing])
 
   // Remove body margin and set background behind the device panel
   useEffect(() => {
@@ -140,33 +163,40 @@ function IndexPopup() {
     }
   }, [])
 
-  const handleEffectChange = (effectId: string) => {
-    setSelectedEffect(effectId)
-    const newParams = getEffectDefaults(effectId)
-    setEffectParams(newParams)
-
-    // If currently capturing, switch the effect in the offscreen document
-    if (isCapturing) {
-      chrome.runtime.sendMessage({
-        type: "SWITCH_EFFECT",
-        effectId: effectId,
-        params: newParams,
-        paramSpecs: paramSpecsFor(effectId)
-      })
-    }
+  const handleEffectChange = (slotIndex: number, effectId: string) => {
+    const newChain = chain.map((s, i) => i === slotIndex ? defaultSlot(effectId) : s)
+    setChain(newChain)
+    if (isCapturing) sendChain(newChain)
   }
 
-  const handleParamUpdate = (param: string, value: number) => {
+  const handleParamUpdate = (slotIndex: number, param: string, value: number) => {
     lastLocalEditRef.current = Date.now()
-    setEffectParams(prev => ({ ...prev, [param]: value }))
+    setChain(prev => prev.map((s, i) =>
+      i === slotIndex ? { ...s, params: { ...s.params, [param]: value } } : s
+    ))
 
     if (isCapturing) {
       chrome.runtime.sendMessage({
         type: "UPDATE_EFFECT_PARAMS",
-        effectId: selectedEffect,
+        slotIndex,
+        effectId: chain[slotIndex]?.effectId,
         params: { [param]: value }
       })
     }
+  }
+
+  const handleAddSlot = () => {
+    if (chain.length >= MAX_CHAIN) return
+    const newChain = [...chain, defaultSlot("reverb")]
+    setChain(newChain)
+    if (isCapturing) sendChain(newChain)
+  }
+
+  const handleRemoveSlot = (slotIndex: number) => {
+    if (chain.length <= 1) return
+    const newChain = chain.filter((_, i) => i !== slotIndex)
+    setChain(newChain)
+    if (isCapturing) sendChain(newChain)
   }
 
   // Blocks stop/start toggling while a START_CAPTURE is still in flight.
@@ -189,9 +219,7 @@ function IndexPopup() {
 
     chrome.runtime.sendMessage({
       type: "START_CAPTURE",
-      effectId: selectedEffect,
-      params: effectParams,
-      paramSpecs: paramSpecsFor(selectedEffect)
+      chain: chainWithSpecs(chain)
     }, (response) => {
       startPending.current = false
       clearTimeout(timeoutId)
@@ -281,14 +309,14 @@ function IndexPopup() {
 
   // MIDI listening for the whole popup lifetime (when permission is granted).
   // An armed learn target consumes the next CC as a binding; otherwise mapped
-  // CCs drive the knobs directly, including while the effect is off, so
-  // values can be dialed in before engaging. The handler reads refs so it
-  // never goes stale as state changes.
+  // CCs drive slot 1's knobs, including while the effect is off. Hardware
+  // control is deliberately confined to the first effect in the chain so one
+  // CC never fans out across every slot.
   const midiMappingsRef = useRef(midiMappings)
   midiMappingsRef.current = midiMappings
-  const effectConfigRef = useRef(currentEffectConfig)
-  effectConfigRef.current = currentEffectConfig
-  const handleParamUpdateRef = useRef<(param: string, value: number) => void>(() => {})
+  const chainRef = useRef(chain)
+  chainRef.current = chain
+  const handleParamUpdateRef = useRef<(slotIndex: number, param: string, value: number) => void>(() => {})
   handleParamUpdateRef.current = handleParamUpdate
 
   useEffect(() => {
@@ -317,15 +345,16 @@ function IndexPopup() {
         return
       }
 
-      // Normal control: scale the CC onto the mapped knob of the active effect
+      // Normal control: scale the CC onto the mapped knob of slot 1
       const knobIndex = midiMappingsRef.current[cc]
       if (knobIndex === undefined) return
-      const spec = effectConfigRef.current?.parameters[knobIndex]
+      const slot0 = chainRef.current[0]
+      const spec = slot0 && getEffectConfig(slot0.effectId)?.parameters[knobIndex]
       if (!spec) return
       let value = spec.min + (msg.data[2] / 127) * (spec.max - spec.min)
       if (spec.step) value = Math.round(value / spec.step) * spec.step
       value = Math.max(spec.min, Math.min(spec.max, value))
-      handleParamUpdateRef.current(spec.key, value)
+      handleParamUpdateRef.current(0, spec.key, value)
     }
 
     const attach = (a: MIDIAccess) => {
@@ -360,24 +389,27 @@ function IndexPopup() {
   // Mirror parameter changes made by MIDI hardware (reported on visualizer
   // frames) onto the knobs, unless the user just moved one locally
   const handleVisualizerFrame = (
-    effectId: string | null,
-    params: Record<string, number> | null,
+    frameChain: Array<{ effectId: string; params: Record<string, number> }> | null,
     midi: { status: string; lastEvent: string } | null
   ) => {
     if (midi) {
       setMidiStatus(midi.lastEvent ? `${midi.status} · ${midi.lastEvent}` : midi.status)
     }
-    if (!params || effectId !== selectedEffect) return
-    if (Date.now() - lastLocalEditRef.current < 400) return
-    setEffectParams(prev => {
+    if (!frameChain || Date.now() - lastLocalEditRef.current < 400) return
+    setChain(prev => {
       let changed = false
-      for (const key of Object.keys(prev)) {
-        if (params[key] !== undefined && Math.abs(params[key] - prev[key]) > 1e-9) {
-          changed = true
-          break
+      const next = prev.map((slot, i) => {
+        const incoming = frameChain[i]
+        if (!incoming || incoming.effectId !== slot.effectId || !incoming.params) return slot
+        for (const key of Object.keys(slot.params)) {
+          if (incoming.params[key] !== undefined && Math.abs(incoming.params[key] - slot.params[key]) > 1e-9) {
+            changed = true
+            return { ...slot, params: { ...slot.params, ...incoming.params } }
+          }
         }
-      }
-      return changed ? { ...prev, ...params } : prev
+        return slot
+      })
+      return changed ? next : prev
     })
   }
 
@@ -398,8 +430,131 @@ function IndexPopup() {
     )
   }
 
-  const paramCount = currentEffectConfig?.parameters?.length || 0
-  const popupHeight = paramCount <= 4 ? 260 : 360
+  const hintRow = (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 20
+    }}>
+      {midiLearn ? (
+        <span style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
+          fontSize: 10,
+          textTransform: 'lowercase',
+          letterSpacing: '0.3px',
+          userSelect: 'none'
+        }}>
+          {midiStatus && (
+            <span style={{ color: theme.textFaint, fontSize: 9 }}>
+              midi: {midiStatus}
+            </span>
+          )}
+          <button
+            onClick={handleMidiReset}
+            title="Clear all MIDI mappings and open the setup page"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '2px 6px',
+              fontFamily: 'inherit',
+              fontSize: 9,
+              color: theme.textFaint,
+              textTransform: 'lowercase',
+              letterSpacing: '0.3px',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.color = theme.textDim }}
+            onMouseOut={(e) => { e.currentTarget.style.color = theme.textFaint }}
+          >
+            reset midi + open setup
+          </button>
+        </span>
+      ) : !isCapturing && (
+        <button
+          onClick={handleStartCapture}
+          title="Start audio capture"
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '4px 8px',
+            fontFamily: 'inherit',
+            fontSize: 10,
+            color: startFailed ? '#e0796a' : theme.textFaint,
+            textTransform: 'lowercase',
+            letterSpacing: '0.3px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'color 0.15s ease'
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.color = startFailed ? '#eda093' : theme.textDim }}
+          onMouseOut={(e) => { e.currentTarget.style.color = startFailed ? '#e0796a' : theme.textFaint }}
+        >
+          {startFailed
+            ? <>capture failed, press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to retry</>
+            : <>press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to start</>}
+        </button>
+      )}
+    </div>
+  )
+
+  const learnTextRow = midiLearn && (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 16
+    }}>
+      <span style={{
+        fontSize: 10,
+        color: theme.led,
+        textTransform: 'lowercase',
+        letterSpacing: '0.3px',
+        userSelect: 'none'
+      }}>
+        {midiLearnTarget === null
+          ? 'click a knob, then move a control on your midi device'
+          : 'now move a control on your midi device...'}
+      </span>
+    </div>
+  )
+
+  const addButton = chain.length < MAX_CHAIN && (
+    <button
+      onClick={handleAddSlot}
+      title="Add another effect to the chain"
+      style={{
+        background: 'none',
+        border: `1px dashed ${theme.controlBorder}`,
+        borderRadius: 3,
+        padding: '3px 14px',
+        fontFamily: 'inherit',
+        fontSize: 10,
+        color: theme.textFaint,
+        textTransform: 'lowercase',
+        letterSpacing: '0.4px',
+        cursor: 'pointer',
+        userSelect: 'none',
+        alignSelf: 'center',
+        transition: 'color 0.15s ease, border-color 0.15s ease'
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.color = theme.textDim
+        e.currentTarget.style.borderColor = '#3a3a3a'
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.color = theme.textFaint
+        e.currentTarget.style.borderColor = theme.controlBorder
+      }}
+    >
+      + add effect
+    </button>
+  )
 
   return (
     <div style={{
@@ -431,7 +586,7 @@ function IndexPopup() {
       }}>
         <Visualizer
           isCapturing={isCapturing}
-          accentColor={currentEffectConfig?.sliderColor || theme.led}
+          accentColor={getEffectConfig(chain[0].effectId)?.sliderColor || theme.led}
           tabId={currentTabId}
           onFrame={handleVisualizerFrame}
         />
@@ -442,33 +597,113 @@ function IndexPopup() {
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 0
+          minHeight: 0,
+          gap: single ? 0 : 10
         }}>
-          <EffectSelector
-            selectedEffect={selectedEffect}
-            onEffectChange={handleEffectChange}
-          />
+          {chain.map((slot, i) => {
+            const config = getEffectConfig(slot.effectId)
+            const isFirst = i === 0
 
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            minHeight: 0
-          }}>
-            <EffectControls
-              effectConfig={currentEffectConfig}
-              effectParams={effectParams}
-              isCapturing={isCapturing}
-              startFailed={startFailed}
-              midiLearn={midiLearn}
-              midiLearnTarget={midiLearnTarget}
-              midiMappings={midiMappings}
-              midiStatus={midiStatus}
-              onArmKnob={handleArmKnob}
-              onMidiReset={handleMidiReset}
-              onParamUpdate={handleParamUpdate}
-              onStart={handleStartCapture}
-            />
-          </div>
+            const selectorRow = (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <EffectSelector
+                    selectedEffect={slot.effectId}
+                    onEffectChange={(id) => handleEffectChange(i, id)}
+                  />
+                </div>
+                {chain.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveSlot(i)}
+                    title="Remove this effect from the chain"
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 3,
+                      border: `1px solid ${theme.controlBorder}`,
+                      background: theme.control,
+                      color: theme.textFaint,
+                      fontSize: 11,
+                      lineHeight: 1,
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0,
+                      transition: 'color 0.15s ease'
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.color = '#e0796a' }}
+                    onMouseOut={(e) => { e.currentTarget.style.color = theme.textFaint }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            )
+
+            const knobs = (
+              <EffectControls
+                effectConfig={config}
+                effectParams={slot.params}
+                isCapturing={isCapturing}
+                knobSize={knobSize}
+                midiLearn={midiLearn && isFirst}
+                midiLearnTarget={midiLearnTarget}
+                midiMappings={midiMappings}
+                onArmKnob={handleArmKnob}
+                onParamUpdate={(param, value) => handleParamUpdate(i, param, value)}
+              />
+            )
+
+            if (single) {
+              // Single-effect layout matches the pre-chain look: knobs float
+              // centered between the selector and the bottom hint
+              return (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  {selectorRow}
+                  <div style={{
+                    flex: midiLearn ? 1.2 : 0.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {learnTextRow}
+                  </div>
+                  {knobs}
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}>
+                    {addButton}
+                    {hintRow}
+                  </div>
+                </div>
+              )
+            }
+
+            return (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {selectorRow}
+                {isFirst && learnTextRow}
+                {knobs}
+              </div>
+            )
+          })}
+
+          {!single && (
+            <div style={{
+              marginTop: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              paddingTop: 2
+            }}>
+              {addButton}
+              {hintRow}
+            </div>
+          )}
         </div>
       </div>
     </div>

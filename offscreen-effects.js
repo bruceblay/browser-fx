@@ -93,27 +93,8 @@ function getTabState(tabId) {
       destinationNode: null,
       audioElement: null,
       currentStream: null,
-      currentEffect: null,
-      currentEffectId: defaultEffectId,
-      currentEffectParams: { ...defaultEffectParams },
-      liveParams: {
-        // Bitcrusher
-        bits: 4,
-        normalRange: 0.4,
-        wet: 1.0,
-        // Reverb
-        roomSize: 0.7,
-        decay: 2.0,
-        // Distortion
-        amount: 0.5,
-        tone: 0.5,
-        // Chorus
-        rate: 2.0,
-        depth: 0.6,
-        delay: 0.025,
-        // Phaser
-        stages: 4,
-      }
+      // Ordered effect slots: [{ effectId, effect, liveParams, params, paramSpecs }]
+      chain: []
     })
   }
   return tabAudioState.get(tabId)
@@ -131,15 +112,13 @@ function cleanupTabState(tabId) {
   if (state.sourceNode) {
     state.sourceNode.disconnect()
   }
-  if (state.currentEffect) {
-    try {
-      if (state.currentEffect.disconnect) {
-        state.currentEffect.disconnect()
-      } else if (state.currentEffect.output) {
-        state.currentEffect.output.disconnect()
+  if (state.chain) {
+    for (const slot of state.chain) {
+      try {
+        effectOutput(slot.effect).disconnect()
+      } catch (error) {
+        console.warn("Error disconnecting effect:", error)
       }
-    } catch (error) {
-      console.warn("Error disconnecting effect:", error)
     }
   }
   if (state.destinationNode) {
@@ -2100,164 +2079,139 @@ function createEffect(effectId, params, tabLiveParams) {
   }
 }
 
-// Switch to a new effect for specific tab
-function switchEffectForTab(effectId, params, tabId) {
-  console.log(`🎵 Switching to effect for tab ${tabId}: ${effectId}`, params)
+// Chain node helpers: bitcrusher-style effects are a bare node, the rest
+// expose { input, output }
+function effectInput(effect) {
+  return effect.input || effect
+}
 
-  // Ensure we have the audioContext
+function effectOutput(effect) {
+  return effect.output || effect
+}
+
+// Build (or rebuild) a tab's full effect chain from a spec array of
+// { effectId, params, paramSpecs }. Crossfades from the old chain when audio
+// is live so structural edits don't click.
+function buildChainForTab(chainSpec, tabId) {
+  console.log(`\u{1F3B5} Building chain for tab ${tabId}:`, chainSpec.map(s => s.effectId).join(' -> '))
+
   if (!audioContext) {
-    console.error("🎵 No audioContext available for effect switching")
+    console.error("\u{1F3B5} No audioContext available for chain build")
     return
   }
+  if (!Array.isArray(chainSpec) || chainSpec.length === 0) return
 
   const state = getTabState(tabId)
-  const oldEffect = state.currentEffect
-  const crossfadeTime = 0.05 // 50ms crossfade
 
-  // Any explicit switch supersedes a pending debounced rebuild
+  // Any explicit rebuild supersedes a pending debounced one
   if (state._rebuildTimer) {
     clearTimeout(state._rebuildTimer)
     state._rebuildTimer = null
   }
 
-  // Create new effect for this tab. On failure keep the current effect
-  // running rather than leaving the chain half-connected.
-  let newEffect
+  // Create all slots first; on failure keep the current chain running
+  let newChain
   try {
-    newEffect = createEffect(effectId, params, state.liveParams)
+    newChain = chainSpec.map((slotSpec) => {
+      const liveParams = {}
+      const effect = createEffect(slotSpec.effectId, slotSpec.params || {}, liveParams)
+      return {
+        effectId: slotSpec.effectId,
+        effect,
+        liveParams,
+        params: { ...(slotSpec.params || {}) },
+        paramSpecs: slotSpec.paramSpecs || null
+      }
+    })
   } catch (error) {
-    console.error(`🎵 Failed to create effect ${effectId} for tab ${tabId}:`, error)
+    console.error(`\u{1F3B5} Failed to build chain for tab ${tabId}:`, error)
     throw error
   }
 
-  // If we have active audio, do a crossfade
-  if (state.sourceNode && state.destinationNode && oldEffect) {
-    try {
-      const now = audioContext.currentTime
+  // Wire the slots together
+  for (let i = 0; i < newChain.length - 1; i++) {
+    effectOutput(newChain[i].effect).connect(effectInput(newChain[i + 1].effect))
+  }
 
-      // Create crossfade gain nodes
-      const oldGain = audioContext.createGain()
-      const newGain = audioContext.createGain()
+  const oldChain = state.chain || []
+  const crossfadeTime = 0.05
 
-      // Set initial gain values
-      oldGain.gain.value = 1.0
-      newGain.gain.value = 0.0
+  if (state.sourceNode && state.destinationNode) {
+    if (oldChain.length) {
+      try {
+        const now = audioContext.currentTime
+        const oldGain = audioContext.createGain()
+        const newGain = audioContext.createGain()
+        oldGain.gain.setValueAtTime(1.0, now)
+        oldGain.gain.linearRampToValueAtTime(0.0, now + crossfadeTime)
+        newGain.gain.setValueAtTime(0.0, now)
+        newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeTime)
 
-      // Schedule crossfade
-      oldGain.gain.setValueAtTime(1.0, now)
-      oldGain.gain.linearRampToValueAtTime(0.0, now + crossfadeTime)
-      newGain.gain.setValueAtTime(0.0, now)
-      newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeTime)
+        // Route the old chain's tail through the fade-out gain
+        const oldTail = effectOutput(oldChain[oldChain.length - 1].effect)
+        oldTail.disconnect()
+        oldTail.connect(oldGain)
+        oldGain.connect(state.destinationNode)
 
-      // Disconnect source from old effect
-      state.sourceNode.disconnect()
+        // Bring the new chain in through the fade-in gain
+        state.sourceNode.connect(effectInput(newChain[0].effect))
+        effectOutput(newChain[newChain.length - 1].effect).connect(newGain)
+        newGain.connect(state.destinationNode)
 
-      // Connect old effect through fade-out gain
-      if (oldEffect.input && oldEffect.output) {
-        state.sourceNode.connect(oldEffect.input)
-        oldEffect.output.disconnect()
-        oldEffect.output.connect(oldGain)
-      } else {
-        state.sourceNode.connect(oldEffect)
-        oldEffect.disconnect()
-        oldEffect.connect(oldGain)
-      }
-      oldGain.connect(state.destinationNode)
-
-      // Connect new effect through fade-in gain
-      if (newEffect.input && newEffect.output) {
-        state.sourceNode.connect(newEffect.input)
-        newEffect.output.connect(newGain)
-      } else {
-        state.sourceNode.connect(newEffect)
-        newEffect.connect(newGain)
-      }
-      newGain.connect(state.destinationNode)
-
-      // Clean up old effect after crossfade
-      setTimeout(() => {
-        try {
-          oldGain.disconnect()
-          if (oldEffect.disconnect) {
-            oldEffect.disconnect()
-          } else if (oldEffect.input && oldEffect.output) {
-            oldEffect.output.disconnect()
+        // Tear the old chain down once the fade completes
+        const oldHead = effectInput(oldChain[0].effect)
+        const sourceNode = state.sourceNode
+        setTimeout(() => {
+          try { sourceNode.disconnect(oldHead) } catch (e) {}
+          try { oldGain.disconnect() } catch (e) {}
+          for (const slot of oldChain) {
+            try { effectOutput(slot.effect).disconnect() } catch (e) {}
           }
-        } catch (e) {
-          console.warn(`🎵 Error cleaning up old effect for tab ${tabId}:`, e)
-        }
-      }, crossfadeTime * 1000 + 100)
-
-      console.log(`🎵 Crossfaded to new effect for tab ${tabId}`)
-    } catch (error) {
-      console.error(`🎵 ERROR during crossfade for tab ${tabId}:`, error)
-      // Fall back to immediate switch if crossfade fails
-      if (oldEffect) {
+        }, crossfadeTime * 1000 + 100)
+      } catch (error) {
+        console.error(`\u{1F3B5} ERROR during chain crossfade for tab ${tabId}:`, error)
         try {
           state.sourceNode.disconnect()
-          if (oldEffect.disconnect) {
-            oldEffect.disconnect()
-          } else if (oldEffect.input && oldEffect.output) {
-            oldEffect.output.disconnect()
-          }
+          state.sourceNode.connect(effectInput(newChain[0].effect))
+          effectOutput(newChain[newChain.length - 1].effect).connect(state.destinationNode)
         } catch (e) {}
       }
-
-      // Connect new effect
-      if (newEffect.input && newEffect.output) {
-        state.sourceNode.connect(newEffect.input)
-        newEffect.output.connect(state.destinationNode)
-      } else {
-        state.sourceNode.connect(newEffect)
-        newEffect.connect(state.destinationNode)
-      }
-    }
-  } else if (state.sourceNode && state.destinationNode) {
-    // No old effect, just connect the new one
-    try {
-      if (newEffect.input && newEffect.output) {
-        state.sourceNode.connect(newEffect.input)
-        newEffect.output.connect(state.destinationNode)
-      } else {
-        state.sourceNode.connect(newEffect)
-        newEffect.connect(state.destinationNode)
-      }
-      console.log(`🎵 Audio chain connected for tab ${tabId} with ${effectId}`)
-    } catch (error) {
-      console.error(`🎵 ERROR connecting audio chain for tab ${tabId}:`, error)
+    } else {
+      state.sourceNode.connect(effectInput(newChain[0].effect))
+      effectOutput(newChain[newChain.length - 1].effect).connect(state.destinationNode)
     }
   }
 
-  // Update state
-  state.currentEffect = newEffect
-  state.currentEffectId = effectId
-  state.currentEffectParams = params
+  state.chain = newChain
 }
 
 // Rebuild-class parameters (impulse responses, buffer sizes) can't update
 // live. Debounce the rebuild so a MIDI sweep rebuilds once at rest instead
-// of dozens of times per second.
-function scheduleEffectRebuild(effectId, tabId) {
+// of dozens of times per second. Rebuilds the whole chain from its current
+// params, which also survives the user switching effects mid-debounce.
+function scheduleChainRebuild(tabId) {
   const state = getTabState(tabId)
   if (state._rebuildTimer) clearTimeout(state._rebuildTimer)
   state._rebuildTimer = setTimeout(() => {
     state._rebuildTimer = null
-    if (!tabAudioState.has(tabId)) return
-    // The user may have switched effects while this was pending; rebuilding
-    // the old effect now would flip the engine out from under the popup
-    if (state.currentEffectId !== effectId) return
-    switchEffectForTab(effectId, state.currentEffectParams, tabId)
+    if (!tabAudioState.has(tabId) || !state.chain || !state.chain.length) return
+    buildChainForTab(
+      state.chain.map(s => ({ effectId: s.effectId, params: s.params, paramSpecs: s.paramSpecs })),
+      tabId
+    )
   }, 150)
 }
 
 // Update parameters for specific tab
-function updateEffectParamsForTab(effectId, params, tabId) {
-  console.log(`🎵 Updating effect params for tab ${tabId}, effect ${effectId}:`, params)
+function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
+  console.log(`🎵 Updating effect params for tab ${tabId}, slot ${slotIndex}, effect ${effectId}:`, params)
 
   const state = getTabState(tabId)
+  const slot = state.chain && state.chain[slotIndex]
 
-  if (effectId !== state.currentEffectId) {
-    console.warn(`🎵 Param update for inactive effect ${effectId} on tab ${tabId} (current: ${state.currentEffectId})`)
+  if (!slot) return
+  if (effectId !== slot.effectId) {
+    console.warn(`🎵 Param update for wrong effect ${effectId} in slot ${slotIndex} on tab ${tabId} (current: ${slot.effectId})`)
     return
   }
 
@@ -2266,7 +2220,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
   const changed = {}
   let hasChange = false
   for (const key of Object.keys(params)) {
-    if (state.currentEffectParams[key] !== params[key]) {
+    if (slot.params[key] !== params[key]) {
       changed[key] = params[key]
       hasChange = true
     }
@@ -2275,377 +2229,377 @@ function updateEffectParamsForTab(effectId, params, tabId) {
   params = changed
 
   // Update live parameters for this tab
-  Object.assign(state.liveParams, params)
-  Object.assign(state.currentEffectParams, params)
+  Object.assign(slot.liveParams, params)
+  Object.assign(slot.params, params)
 
   // Apply real-time updates based on effect type
-  if (!state.currentEffect) return
+  if (!slot.effect) return
 
   // Note: For simplicity, I'm only implementing the most commonly changed parameters
   // The bitcrusher parameters will update automatically via the tab's liveParams reference
-  switch (state.currentEffectId) {
+  switch (slot.effectId) {
     case 'bitcrusher':
       // Bitcrusher parameters are updated automatically via liveParams in the audio callback
       break
 
     case 'reverb':
       // Update wet/dry mix in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Note: roomSize and decay require effect recreation
       if (params.roomSize !== undefined || params.decay !== undefined) {
-        scheduleEffectRebuild(effectId, tabId)
+        scheduleChainRebuild(tabId)
       }
       break
 
     case 'taptempodelay':
       // Update wet/dry mix and feedback in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
+        smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
       }
       // Note: subdivision or tapTempo changes require effect recreation to recalculate delay time
       if (params.subdivision !== undefined || params.tapTempo !== undefined) {
-        scheduleEffectRebuild(effectId, tabId)
+        scheduleChainRebuild(tabId)
       }
       break
 
     case 'loopchop':
       // Update wet/dry mix in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Note: loopSize, stutterRate, and tempo changes require effect
       // recreation to resize the capture buffer
       if (params.loopSize !== undefined || params.stutterRate !== undefined || params.tempo !== undefined) {
-        scheduleEffectRebuild(effectId, tabId)
+        scheduleChainRebuild(tabId)
       }
       break
 
     case 'simplefilter':
       // Update filter parameters in real-time with smooth transitions
-      if (params.cutoffFreq !== undefined && state.currentEffect.input._filter) {
-        smoothParamChange(state.currentEffect.input._filter.frequency, state.liveParams.cutoffFreq, 0.02)
+      if (params.cutoffFreq !== undefined && slot.effect.input._filter) {
+        smoothParamChange(slot.effect.input._filter.frequency, slot.liveParams.cutoffFreq, 0.02)
       }
-      if (params.resonance !== undefined && state.currentEffect.input._filter) {
-        smoothParamChange(state.currentEffect.input._filter.Q, state.liveParams.resonance, 0.02)
+      if (params.resonance !== undefined && slot.effect.input._filter) {
+        smoothParamChange(slot.effect.input._filter.Q, slot.liveParams.resonance, 0.02)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Filter type switches live on the BiquadFilter, no rebuild needed
-      if (params.filterType !== undefined && state.currentEffect.input._filter) {
+      if (params.filterType !== undefined && slot.effect.input._filter) {
         const liveFilterTypes = ['lowpass', 'highpass', 'bandpass']
-        state.currentEffect.input._filter.type =
-          liveFilterTypes[Math.floor(state.liveParams.filterType)] || 'lowpass'
+        slot.effect.input._filter.type =
+          liveFilterTypes[Math.floor(slot.liveParams.filterType)] || 'lowpass'
       }
       break
 
     case 'flanger':
       // Update flanger parameters in real-time with smooth transitions
-      if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo) {
+        smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
       }
-      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+      if (params.depth !== undefined && slot.effect.input._lfoGain) {
         // Match creation scaling: stays under the 5ms base delay
         const maxDelayModulation = 0.0045
-        const depthAmount = (state.liveParams.depth / 100) * maxDelayModulation
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, depthAmount, 0.015)
+        const depthAmount = (slot.liveParams.depth / 100) * maxDelayModulation
+        smoothParamChange(slot.effect.input._lfoGain.gain, depthAmount, 0.015)
       }
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
+        smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'djeq':
       // Update EQ bands in real-time with smooth transitions
-      if (params.lowGain !== undefined && state.currentEffect.input._lowShelf) {
-        smoothParamChange(state.currentEffect.input._lowShelf.gain, state.liveParams.lowGain, 0.02)
+      if (params.lowGain !== undefined && slot.effect.input._lowShelf) {
+        smoothParamChange(slot.effect.input._lowShelf.gain, slot.liveParams.lowGain, 0.02)
       }
-      if (params.midGain !== undefined && state.currentEffect.input._midPeaking) {
-        smoothParamChange(state.currentEffect.input._midPeaking.gain, state.liveParams.midGain, 0.02)
+      if (params.midGain !== undefined && slot.effect.input._midPeaking) {
+        smoothParamChange(slot.effect.input._midPeaking.gain, slot.liveParams.midGain, 0.02)
       }
-      if (params.highGain !== undefined && state.currentEffect.input._highShelf) {
-        smoothParamChange(state.currentEffect.input._highShelf.gain, state.liveParams.highGain, 0.02)
+      if (params.highGain !== undefined && slot.effect.input._highShelf) {
+        smoothParamChange(slot.effect.input._highShelf.gain, slot.liveParams.highGain, 0.02)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'compressor':
       // Update compressor parameters in real-time with smooth transitions
-      if (params.threshold !== undefined && state.currentEffect.input._compressor) {
-        smoothParamChange(state.currentEffect.input._compressor.threshold, state.liveParams.threshold, 0.02)
+      if (params.threshold !== undefined && slot.effect.input._compressor) {
+        smoothParamChange(slot.effect.input._compressor.threshold, slot.liveParams.threshold, 0.02)
       }
-      if (params.ratio !== undefined && state.currentEffect.input._compressor) {
-        smoothParamChange(state.currentEffect.input._compressor.ratio, state.liveParams.ratio, 0.02)
+      if (params.ratio !== undefined && slot.effect.input._compressor) {
+        smoothParamChange(slot.effect.input._compressor.ratio, slot.liveParams.ratio, 0.02)
       }
-      if (params.attack !== undefined && state.currentEffect.input._compressor) {
-        smoothParamChange(state.currentEffect.input._compressor.attack, state.liveParams.attack, 0.02)
+      if (params.attack !== undefined && slot.effect.input._compressor) {
+        smoothParamChange(slot.effect.input._compressor.attack, slot.liveParams.attack, 0.02)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'ringmodulator':
       // carrierFreq, mix, and waveform are read live from liveParams in the
       // audio callback; only the wet/dry gains need explicit ramps
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'combfilter':
       // Update comb filter parameters in real-time with smooth transitions
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
+        smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
       }
-      if (params.feedforward !== undefined && state.currentEffect.input._feedforwardGain) {
-        smoothParamChange(state.currentEffect.input._feedforwardGain.gain, state.liveParams.feedforward, 0.015)
+      if (params.feedforward !== undefined && slot.effect.input._feedforwardGain) {
+        smoothParamChange(slot.effect.input._feedforwardGain.gain, slot.liveParams.feedforward, 0.015)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Note: delayTime changes require effect recreation
       if (params.delayTime !== undefined) {
-        scheduleEffectRebuild(effectId, tabId)
+        scheduleChainRebuild(tabId)
       }
       break
 
     case 'distortion':
       // Update wet/dry mix and tone filter in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.tone !== undefined && state.currentEffect.input._filter) {
-        smoothParamChange(state.currentEffect.input._filter.frequency, 2000 + (state.liveParams.tone * 8000), 0.025)
+      if (params.tone !== undefined && slot.effect.input._filter) {
+        smoothParamChange(slot.effect.input._filter.frequency, 2000 + (slot.liveParams.tone * 8000), 0.025)
       }
-      if (params.amount !== undefined && state.currentEffect.input._updateDistortionCurve) {
-        state.currentEffect.input._updateDistortionCurve()
+      if (params.amount !== undefined && slot.effect.input._updateDistortionCurve) {
+        slot.effect.input._updateDistortionCurve()
       }
       break
 
     case 'chorus':
       // Update wet/dry mix and LFO parameters in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.rate !== undefined && state.currentEffect.input._lfo1 && state.currentEffect.input._lfo2) {
-        smoothParamChange(state.currentEffect.input._lfo1.frequency, state.liveParams.rate, 0.02)
-        smoothParamChange(state.currentEffect.input._lfo2.frequency, state.liveParams.rate * 1.23, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo1 && slot.effect.input._lfo2) {
+        smoothParamChange(slot.effect.input._lfo1.frequency, slot.liveParams.rate, 0.02)
+        smoothParamChange(slot.effect.input._lfo2.frequency, slot.liveParams.rate * 1.23, 0.02)
       }
       if (params.depth !== undefined || params.delay !== undefined) {
-        const delayMs = state.liveParams.delay
-        if (params.delay !== undefined && state.currentEffect.input._delay1 && state.currentEffect.input._delay2) {
-          smoothParamChange(state.currentEffect.input._delay1.delayTime, delayMs / 1000, 0.03, 'linear')
-          smoothParamChange(state.currentEffect.input._delay2.delayTime, (delayMs * 1.5) / 1000, 0.03, 'linear')
+        const delayMs = slot.liveParams.delay
+        if (params.delay !== undefined && slot.effect.input._delay1 && slot.effect.input._delay2) {
+          smoothParamChange(slot.effect.input._delay1.delayTime, delayMs / 1000, 0.03, 'linear')
+          smoothParamChange(slot.effect.input._delay2.delayTime, (delayMs * 1.5) / 1000, 0.03, 'linear')
         }
-        if (state.currentEffect.input._lfoGain1 && state.currentEffect.input._lfoGain2) {
-          smoothParamChange(state.currentEffect.input._lfoGain1.gain, chorusModDepth(delayMs, state.liveParams.depth), 0.02)
-          smoothParamChange(state.currentEffect.input._lfoGain2.gain, chorusModDepth(delayMs * 1.5, state.liveParams.depth) * 0.8, 0.02)
+        if (slot.effect.input._lfoGain1 && slot.effect.input._lfoGain2) {
+          smoothParamChange(slot.effect.input._lfoGain1.gain, chorusModDepth(delayMs, slot.liveParams.depth), 0.02)
+          smoothParamChange(slot.effect.input._lfoGain2.gain, chorusModDepth(delayMs * 1.5, slot.liveParams.depth) * 0.8, 0.02)
         }
       }
       break
 
     case 'phaser':
       // Update wet/dry mix and LFO parameters in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo) {
+        smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
       }
-      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
+      if (params.depth !== undefined && slot.effect.input._lfoGain) {
         // Keep the same +/-500Hz max scale as effect creation
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 500, 0.02)
+        smoothParamChange(slot.effect.input._lfoGain.gain, slot.liveParams.depth * 500, 0.02)
       }
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
+        smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
       }
       break
 
     case 'tremolo':
       // Update LFO parameters in real-time with smooth transitions
       if (params.rate !== undefined || params.spread !== undefined) {
-        if (params.rate !== undefined && state.currentEffect.input._lfo) {
-          smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+        if (params.rate !== undefined && slot.effect.input._lfo) {
+          smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
         }
         // The stereo phase offset depends on both spread and rate
-        if (state.currentEffect.input._spreadDelay) {
-          smoothParamChange(state.currentEffect.input._spreadDelay.delayTime, (state.liveParams.spread / 360) / state.liveParams.rate, 0.03, 'linear')
+        if (slot.effect.input._spreadDelay) {
+          smoothParamChange(slot.effect.input._spreadDelay.delayTime, (slot.liveParams.spread / 360) / slot.liveParams.rate, 0.03, 'linear')
         }
       }
-      if (params.depth !== undefined && state.currentEffect.input._lfoGain && state.currentEffect.input._ampL && state.currentEffect.input._ampR) {
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 0.5, 0.015)
-        smoothParamChange(state.currentEffect.input._ampL.gain, 1 - state.liveParams.depth * 0.5, 0.015)
-        smoothParamChange(state.currentEffect.input._ampR.gain, 1 - state.liveParams.depth * 0.5, 0.015)
+      if (params.depth !== undefined && slot.effect.input._lfoGain && slot.effect.input._ampL && slot.effect.input._ampR) {
+        smoothParamChange(slot.effect.input._lfoGain.gain, slot.liveParams.depth * 0.5, 0.015)
+        smoothParamChange(slot.effect.input._ampL.gain, 1 - slot.liveParams.depth * 0.5, 0.015)
+        smoothParamChange(slot.effect.input._ampR.gain, 1 - slot.liveParams.depth * 0.5, 0.015)
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'delay':
       // Update wet/dry mix, delay time, and feedback in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.delayTime !== undefined && state.currentEffect.input._delayNode) {
-        smoothParamChange(state.currentEffect.input._delayNode.delayTime, state.liveParams.delayTime, 0.05, 'linear')
+      if (params.delayTime !== undefined && slot.effect.input._delayNode) {
+        smoothParamChange(slot.effect.input._delayNode.delayTime, slot.liveParams.delayTime, 0.05, 'linear')
       }
-      if (params.feedback !== undefined && state.currentEffect.input._feedbackGain) {
-        smoothParamChange(state.currentEffect.input._feedbackGain.gain, state.liveParams.feedback, 0.015)
+      if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
+        smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
       }
       break
 
     case 'vibrato':
       // Update wet/dry mix and LFO parameters in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo) {
+        smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
       }
-      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth * 0.01, 0.015)
+      if (params.depth !== undefined && slot.effect.input._lfoGain) {
+        smoothParamChange(slot.effect.input._lfoGain.gain, slot.liveParams.depth * 0.01, 0.015)
       }
-      if (params.type !== undefined && state.currentEffect.input._lfo) {
+      if (params.type !== undefined && slot.effect.input._lfo) {
         const vibratoWaveforms = ['sine', 'square', 'sawtooth', 'triangle']
-        state.currentEffect.input._lfo.type = vibratoWaveforms[Math.floor(state.liveParams.type) % vibratoWaveforms.length]
+        slot.effect.input._lfo.type = vibratoWaveforms[Math.floor(slot.liveParams.type) % vibratoWaveforms.length]
       }
       break
 
     case 'autofilter':
       // Update wet/dry mix and LFO parameters in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo) {
+        smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
       }
-      if ((params.baseFreq !== undefined || params.octaves !== undefined || params.depth !== undefined) && state.currentEffect.input._lfoGain && state.currentEffect.input._filter) {
+      if ((params.baseFreq !== undefined || params.octaves !== undefined || params.depth !== undefined) && slot.effect.input._lfoGain && slot.effect.input._filter) {
         // Keep the sweep centered between baseFreq and the octave ceiling
-        const maxFreq = Math.min(state.liveParams.baseFreq * Math.pow(2, state.liveParams.octaves), 15000)
-        const sweepHalf = (maxFreq - state.liveParams.baseFreq) / 2
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, sweepHalf * state.liveParams.depth, 0.025)
-        smoothParamChange(state.currentEffect.input._filter.frequency, state.liveParams.baseFreq + sweepHalf, 0.025)
+        const maxFreq = Math.min(slot.liveParams.baseFreq * Math.pow(2, slot.liveParams.octaves), 15000)
+        const sweepHalf = (maxFreq - slot.liveParams.baseFreq) / 2
+        smoothParamChange(slot.effect.input._lfoGain.gain, sweepHalf * slot.liveParams.depth, 0.025)
+        smoothParamChange(slot.effect.input._filter.frequency, slot.liveParams.baseFreq + sweepHalf, 0.025)
       }
       break
 
     case 'hallreverb':
       // Update wet/dry mix in real-time with smooth transitions
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Note: roomSize, decay, and preDelay require effect recreation
       if (params.roomSize !== undefined || params.decay !== undefined || params.preDelay !== undefined) {
-        scheduleEffectRebuild(effectId, tabId)
+        scheduleChainRebuild(tabId)
       }
       break
 
     case 'autopanner':
       // Update LFO parameters in real-time with smooth transitions
-      if (params.rate !== undefined && state.currentEffect.input._lfo) {
-        smoothParamChange(state.currentEffect.input._lfo.frequency, state.liveParams.rate, 0.02)
+      if (params.rate !== undefined && slot.effect.input._lfo) {
+        smoothParamChange(slot.effect.input._lfo.frequency, slot.liveParams.rate, 0.02)
       }
-      if (params.depth !== undefined && state.currentEffect.input._lfoGain) {
-        smoothParamChange(state.currentEffect.input._lfoGain.gain, state.liveParams.depth, 0.015)
+      if (params.depth !== undefined && slot.effect.input._lfoGain) {
+        smoothParamChange(slot.effect.input._lfoGain.gain, slot.liveParams.depth, 0.015)
       }
-      if (params.type !== undefined && state.currentEffect.input._lfo) {
+      if (params.type !== undefined && slot.effect.input._lfo) {
         const panWaveforms = ['sine', 'square', 'sawtooth', 'triangle']
-        state.currentEffect.input._lfo.type = panWaveforms[Math.floor(state.liveParams.type) % panWaveforms.length]
+        slot.effect.input._lfo.type = panWaveforms[Math.floor(slot.liveParams.type) % panWaveforms.length]
       }
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'pitchshifter':
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Pitch and window size apply live via smoothed ramps
-      if ((params.pitch !== undefined || params.windowSize !== undefined) && state.currentEffect.input._applyPitchSettings) {
-        state.currentEffect.input._applyPitchSettings()
+      if ((params.pitch !== undefined || params.windowSize !== undefined) && slot.effect.input._applyPitchSettings) {
+        slot.effect.input._applyPitchSettings()
       }
       break
 
     case 'tapestop':
       // Tape stop params are read from liveParams in the audio callback
       // Wet/dry mix can be updated in real-time
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       // Mode change resets the cycle
-      if (params.mode !== undefined && state.currentEffect.input._resetCycle) {
-        state.currentEffect.input._resetCycle()
+      if (params.mode !== undefined && slot.effect.input._resetCycle) {
+        slot.effect.input._resetCycle()
       }
       break
 
     case 'sidechainpump':
       // Sidechain pump params are read from liveParams in the audio callback
       // Wet/dry mix can be updated in real-time
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
       break
 
     case 'lofitape':
-      if (params.wet !== undefined && state.currentEffect.input._wetGain && state.currentEffect.input._dryGain) {
-        smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
-        smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
+      if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
+        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
       }
-      if (params.wowDepth !== undefined && state.currentEffect.input._wowGain) {
-        smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.008, 0.02)
+      if (params.wowDepth !== undefined && slot.effect.input._wowGain) {
+        smoothParamChange(slot.effect.input._wowGain.gain, slot.liveParams.wowDepth * 0.008, 0.02)
       }
-      if (params.flutterRate !== undefined && state.currentEffect.input._flutterLfo) {
-        smoothParamChange(state.currentEffect.input._flutterLfo.frequency, state.liveParams.flutterRate, 0.02)
+      if (params.flutterRate !== undefined && slot.effect.input._flutterLfo) {
+        smoothParamChange(slot.effect.input._flutterLfo.frequency, slot.liveParams.flutterRate, 0.02)
       }
-      if (params.saturation !== undefined && state.currentEffect.input._updateSaturationCurve) {
-        state.currentEffect.input._updateSaturationCurve()
+      if (params.saturation !== undefined && slot.effect.input._updateSaturationCurve) {
+        slot.effect.input._updateSaturationCurve()
       }
       break
 
     default:
-      console.warn(`🎵 Real-time parameter update not implemented for effect: ${state.currentEffectId}`)
+      console.warn(`🎵 Real-time parameter update not implemented for effect: ${slot.effectId}`)
       // For other effects that don't have real-time updates implemented,
       // recreate the effect with new parameters
       console.log(`🎵 Recreating ${effectId} for tab ${tabId} with new parameters`)
-      switchEffectForTab(effectId, state.currentEffectParams, tabId)
+      scheduleChainRebuild(tabId)
   }
 }
 
 // Process audio stream for specific tab
-async function processAudioStreamForTab(streamId, tabId) {
+async function processAudioStreamForTab(streamId, tabId, chainSpec) {
   console.log(`🎵 Processing audio stream for tab ${tabId} with ID:`, streamId)
 
   try {
@@ -2676,12 +2630,10 @@ async function processAudioStreamForTab(streamId, tabId) {
     state.destinationNode.connect(state.streamDestination)
     state.destinationNode.connect(state.analyser)
 
-    // Create initial effect with the parameters from the message
-    const initialParams = state.currentEffectParams
-    console.log(`🎵 Initializing tab ${tabId} with params:`, state.currentEffectId, initialParams)
-    switchEffectForTab(state.currentEffectId, initialParams, tabId)
+    // Build the effect chain from the spec sent by the popup
+    buildChainForTab(chainSpec, tabId)
 
-    console.log(`🎵 Audio graph connected for tab ${tabId} with ${state.currentEffectId} effect`)
+    console.log(`🎵 Audio graph connected for tab ${tabId} (${chainSpec.length} slot chain)`)
 
     // Play the processed stream
     state.audioElement = new Audio()
@@ -2690,7 +2642,7 @@ async function processAudioStreamForTab(streamId, tabId) {
 
     state.currentStream = stream
 
-    console.log(`🎵 Audio processing setup complete for tab ${tabId} with ${state.currentEffectId}!`)
+    console.log(`🎵 Audio processing setup complete for tab ${tabId}!`)
 
   } catch (error) {
     console.error(`🎵 Error setting up audio processing for tab ${tabId}:`, error)
@@ -2713,8 +2665,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const frameState = tabAudioState.get(message.tabId)
     sendResponse({
       bands: getVisualizerBands(message.tabId),
-      effectId: frameState ? frameState.currentEffectId : null,
-      params: frameState ? frameState.currentEffectParams : null,
+      chain: frameState && frameState.chain
+        ? frameState.chain.map(s => ({ effectId: s.effectId, params: s.params }))
+        : null,
       midi: { status: midiStatus, lastEvent: midiLastEvent }
     })
     return
@@ -2739,21 +2692,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("🎵 MESSAGE RECEIVED - OFFSCREEN IS WORKING!")
 
   if (message.type === "PROCESS_STREAM") {
-    console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, effectId=${message.effectId}, params=`, message.params)
+    console.log(`🎵 PROCESS_STREAM: tabId=${message.tabId}, chain=`, message.chain)
 
     // Start from a clean slate: a stale stream left over from a previous
     // capture blocks the new getUserMedia and the effect silently never engages
     const tabId = message.tabId
     cleanupTabState(tabId)
-    const state = getTabState(tabId)
+    getTabState(tabId)
 
-    // Set the effect for this tab
-    state.currentEffectId = message.effectId || 'bitcrusher'
-    state.currentEffectParams = message.params || {}
-    state.paramSpecs = message.paramSpecs || null
-    console.log(`🎵 AFTER SETTING for tab ${tabId}: currentEffectId=${state.currentEffectId}, currentEffectParams=`, state.currentEffectParams)
+    // Accept a chain spec; fall back to the legacy single-effect shape
+    const chainSpec = Array.isArray(message.chain) && message.chain.length
+      ? message.chain
+      : [{ effectId: message.effectId || 'bitcrusher', params: message.params || {}, paramSpecs: message.paramSpecs || null }]
 
-    processAudioStreamForTab(message.streamId, tabId)
+    processAudioStreamForTab(message.streamId, tabId, chainSpec)
       .then(() => {
         sendResponse({ success: true, message: "Stream processing started" })
       })
@@ -2787,21 +2739,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "UPDATE_EFFECT_PARAMS") {
     // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
     if (message.tabId === undefined) return
-    updateEffectParamsForTab(message.effectId, message.params, message.tabId)
+    updateEffectParamsForTab(message.effectId, message.params, message.tabId, message.slotIndex || 0)
     console.log(`🎵 Parameters updated for tab ${message.tabId}`)
     sendResponse({ success: true, message: "Parameters updated" })
     return
   }
 
-  if (message.type === "SWITCH_EFFECT") {
+  if (message.type === "SET_CHAIN") {
     // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
     if (message.tabId === undefined) return
-    if (message.paramSpecs) {
-      getTabState(message.tabId).paramSpecs = message.paramSpecs
+    const chainState = tabAudioState.get(message.tabId)
+    if (!chainState || !chainState.sourceNode) return
+    try {
+      buildChainForTab(message.chain || [], message.tabId)
+      sendResponse({ success: true, message: "Chain updated" })
+    } catch (error) {
+      sendResponse({ success: false, error: error.message })
     }
-    switchEffectForTab(message.effectId, message.params, message.tabId)
-    console.log(`🎵 Switched to ${message.effectId} for tab ${message.tabId}`)
-    sendResponse({ success: true, message: `Switched to ${message.effectId}` })
     return
   }
 
@@ -2910,11 +2864,14 @@ function handleMidiMessage(msg) {
     return
   }
 
-  // Apply to every capturing tab's active effect
+  // Apply to slot 1 of every capturing tab's chain. Hardware control is
+  // deliberately confined to the first effect so one CC never fans out
+  // across every slot.
   let applied = false
   for (const [tabId, state] of tabAudioState) {
-    const spec = state.paramSpecs && state.paramSpecs[knobIndex]
-    if (!spec || !state.currentEffect) continue
+    const slot = state.chain && state.chain[0]
+    const spec = slot && slot.paramSpecs && slot.paramSpecs[knobIndex]
+    if (!spec || !slot.effect) continue
 
     let paramValue = spec.min + (value / 127) * (spec.max - spec.min)
     if (spec.step) {
@@ -2923,7 +2880,7 @@ function handleMidiMessage(msg) {
     paramValue = Math.max(spec.min, Math.min(spec.max, paramValue))
     if (!Number.isFinite(paramValue)) continue
 
-    updateEffectParamsForTab(state.currentEffectId, { [spec.key]: paramValue }, tabId)
+    updateEffectParamsForTab(slot.effectId, { [spec.key]: paramValue }, tabId, 0)
     applied = true
   }
   midiLastEvent = applied

@@ -41,7 +41,7 @@ function forwardWithActiveTab(message: Record<string, unknown>) {
   })
 }
 
-async function startCapture(message: { effectId: string; params: Record<string, number>; paramSpecs?: unknown }) {
+async function startCapture(message: { chain?: unknown }) {
   console.log("Processing START_CAPTURE request")
 
   // Parallelize offscreen creation and tab query for speed
@@ -93,9 +93,7 @@ async function startCapture(message: { effectId: string; params: Record<string, 
     response = await chrome.runtime.sendMessage({
       type: "PROCESS_STREAM",
       streamId: streamId,
-      effectId: message.effectId,
-      params: message.params,
-      paramSpecs: message.paramSpecs,
+      chain: message.chain,
       tabId: activeTab.id
     })
   } catch (error) {
@@ -167,6 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Processing UPDATE_EFFECT_PARAMS request:", message.effectId, message.params)
     forwardWithActiveTab({
       type: "UPDATE_EFFECT_PARAMS",
+      slotIndex: message.slotIndex,
       effectId: message.effectId,
       params: message.params
     })
@@ -181,15 +180,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return
   }
 
-  if (message.type === "SWITCH_EFFECT") {
-    console.log("Processing SWITCH_EFFECT request:", message.effectId, message.params)
+  if (message.type === "SET_CHAIN") {
+    console.log("Processing SET_CHAIN request:", (message.chain || []).length, "slots")
     forwardWithActiveTab({
-      type: "SWITCH_EFFECT",
-      effectId: message.effectId,
-      params: message.params,
-      paramSpecs: message.paramSpecs
+      type: "SET_CHAIN",
+      chain: message.chain
     })
-    sendResponse({ success: true, message: "Effect switched" })
+    sendResponse({ success: true, message: "Chain updated" })
     return
   }
 })
