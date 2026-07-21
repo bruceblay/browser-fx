@@ -205,7 +205,10 @@ function createBitcrusher(context, params, tabLiveParams) {
 }
 
 // Simple Reverb Effect Implementation
-function createReverb(context, params) {
+function createReverb(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   // Initialize live params
   liveParams.roomSize = params.roomSize !== undefined ? params.roomSize : 0.7
   liveParams.decay = params.decay !== undefined ? params.decay : 2.0
@@ -260,7 +263,10 @@ function createReverb(context, params) {
 }
 
 // Simple Distortion Effect Implementation
-function createDistortion(context, params) {
+function createDistortion(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   // Initialize live params
   liveParams.amount = params.amount !== undefined ? params.amount : 0.5
   liveParams.tone = params.tone !== undefined ? params.tone : 0.5
@@ -322,7 +328,10 @@ function createDistortion(context, params) {
 }
 
 // Chorus Effect Implementation - Based on Tone.js specs
-function createChorus(context, params) {
+function createChorus(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   console.log('🎵 CHORUS: Creating Tone.js-style chorus effect')
 
   // Initialize live params
@@ -410,7 +419,10 @@ function createChorus(context, params) {
 }
 
 // Phaser Effect Implementation - Classic 4-Stage Design
-function createPhaser(context, params) {
+function createPhaser(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   console.log('🎵 PHASER: Creating classic 4-stage phaser')
 
   // Initialize live params with classic phaser values
@@ -498,7 +510,10 @@ function createPhaser(context, params) {
 }
 
 // Tremolo Effect Implementation (stereo, with L/R phase spread)
-function createTremolo(context, params) {
+function createTremolo(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   console.log('🎵 TREMOLO: Creating tremolo effect')
 
   // Initialize live params
@@ -575,7 +590,10 @@ function createTremolo(context, params) {
 }
 
 // Simple Delay Effect Implementation
-function createDelay(context, params) {
+function createDelay(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   console.log('🎵 DELAY: Creating delay effect')
 
   // Initialize live params
@@ -625,7 +643,10 @@ function createDelay(context, params) {
 }
 
 // Vibrato Effect Implementation
-function createVibrato(context, params) {
+function createVibrato(context, params, tabLiveParams) {
+  // Per-tab params; shadows the legacy global so every read and write
+  // in this function is tab-scoped
+  const liveParams = tabLiveParams
   console.log('🎵 VIBRATO: Creating vibrato effect')
 
   // Initialize live params
@@ -702,7 +723,7 @@ function createAutoFilter(context, params, tabLiveParams) {
   // Set up filter and LFO. The sweep is centered between baseFreq and the
   // octave ceiling so the modulated frequency stays in the intended range
   // instead of clamping at 0Hz for half of each cycle.
-  const maxFreq = tabLiveParams.baseFreq * Math.pow(2, tabLiveParams.octaves)
+  const maxFreq = Math.min(tabLiveParams.baseFreq * Math.pow(2, tabLiveParams.octaves), 15000)
   const sweepHalf = (maxFreq - tabLiveParams.baseFreq) / 2
 
   filter.type = 'lowpass'
@@ -1853,7 +1874,7 @@ function createLofiTape(context, params, tabLiveParams) {
   wowLfo.type = 'sine'
   wowLfo.frequency.value = 0.4
   const wowGain = context.createGain()
-  wowGain.gain.value = tabLiveParams.wowDepth * 0.003 // subtle delay modulation
+  wowGain.gain.value = tabLiveParams.wowDepth * 0.008 // audible tape drift at higher settings
 
   // Flutter LFO (faster, based on param)
   const flutterLfo = context.createOscillator()
@@ -1941,42 +1962,42 @@ function createEffect(effectId, params, tabLiveParams) {
       return result
 
     case 'reverb':
-      result = createReverb(context, params)
+      result = createReverb(context, params, tabLiveParams)
       console.log(`🎵 REVERB created:`, typeof result, result)
       return result
 
     case 'distortion':
-      result = createDistortion(context, params)
+      result = createDistortion(context, params, tabLiveParams)
       console.log(`🎵 DISTORTION created:`, typeof result, result)
       return result
 
     case 'chorus':
       console.log(`🎵 CREATING CHORUS EFFECT`)
-      result = createChorus(context, params)
+      result = createChorus(context, params, tabLiveParams)
       console.log(`🎵 CHORUS created:`, typeof result, result)
       return result
 
     case 'phaser':
       console.log(`🎵 CREATING PHASER EFFECT`)
-      result = createPhaser(context, params)
+      result = createPhaser(context, params, tabLiveParams)
       console.log(`🎵 PHASER created:`, typeof result, result)
       return result
 
     case 'tremolo':
       console.log(`🎵 CREATING TREMOLO EFFECT`)
-      result = createTremolo(context, params)
+      result = createTremolo(context, params, tabLiveParams)
       console.log(`🎵 TREMOLO created:`, typeof result, result)
       return result
 
     case 'delay':
       console.log(`🎵 CREATING DELAY EFFECT`)
-      result = createDelay(context, params)
+      result = createDelay(context, params, tabLiveParams)
       console.log(`🎵 DELAY created:`, typeof result, result)
       return result
 
     case 'vibrato':
       console.log(`🎵 CREATING VIBRATO EFFECT`)
-      result = createVibrato(context, params)
+      result = createVibrato(context, params, tabLiveParams)
       console.log(`🎵 VIBRATO created:`, typeof result, result)
       return result
 
@@ -2526,7 +2547,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
       }
       if ((params.baseFreq !== undefined || params.octaves !== undefined || params.depth !== undefined) && state.currentEffect.input._lfoGain && state.currentEffect.input._filter) {
         // Keep the sweep centered between baseFreq and the octave ceiling
-        const maxFreq = state.liveParams.baseFreq * Math.pow(2, state.liveParams.octaves)
+        const maxFreq = Math.min(state.liveParams.baseFreq * Math.pow(2, state.liveParams.octaves), 15000)
         const sweepHalf = (maxFreq - state.liveParams.baseFreq) / 2
         smoothParamChange(state.currentEffect.input._lfoGain.gain, sweepHalf * state.liveParams.depth, 0.025)
         smoothParamChange(state.currentEffect.input._filter.frequency, state.liveParams.baseFreq + sweepHalf, 0.025)
@@ -2602,7 +2623,7 @@ function updateEffectParamsForTab(effectId, params, tabId) {
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
       if (params.wowDepth !== undefined && state.currentEffect.input._wowGain) {
-        smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.003, 0.02)
+        smoothParamChange(state.currentEffect.input._wowGain.gain, state.liveParams.wowDepth * 0.008, 0.02)
       }
       if (params.flutterRate !== undefined && state.currentEffect.input._flutterLfo) {
         smoothParamChange(state.currentEffect.input._flutterLfo.frequency, state.liveParams.flutterRate, 0.02)
