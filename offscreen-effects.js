@@ -1055,6 +1055,7 @@ function createLoopChop(context, params, tabLiveParams) {
   // Initialize live params (loopSize 0 is a valid value: 1/32 beat)
   tabLiveParams.loopSize = params.loopSize !== undefined ? params.loopSize : 2
   tabLiveParams.stutterRate = params.stutterRate !== undefined ? params.stutterRate : 4
+  tabLiveParams.tempo = params.tempo !== undefined ? params.tempo : 120
   tabLiveParams.wet = params.wet !== undefined ? params.wet : 0.8
 
   // Loop size multipliers (in beats at 120 BPM as reference)
@@ -1066,8 +1067,8 @@ function createLoopChop(context, params, tabLiveParams) {
     2.0     // 4: 1/2 beat
   ]
 
-  // Calculate loop time (assuming 120 BPM for now)
-  const bpm = 120
+  // Calculate loop time from the tempo knob
+  const bpm = tabLiveParams.tempo
   const beatLength = 60 / bpm
   const loopSizeIndex = Math.floor(tabLiveParams.loopSize)
   const loopTime = beatLength * loopSizes[loopSizeIndex]
@@ -2320,8 +2321,9 @@ function updateEffectParamsForTab(effectId, params, tabId) {
         smoothParamChange(state.currentEffect.input._wetGain.gain, state.liveParams.wet, 0.015)
         smoothParamChange(state.currentEffect.input._dryGain.gain, 1 - state.liveParams.wet, 0.015)
       }
-      // Note: loopSize and stutterRate changes require effect recreation
-      if (params.loopSize !== undefined || params.stutterRate !== undefined) {
+      // Note: loopSize, stutterRate, and tempo changes require effect
+      // recreation to resize the capture buffer
+      if (params.loopSize !== undefined || params.stutterRate !== undefined || params.tempo !== undefined) {
         scheduleEffectRebuild(effectId, tabId)
       }
       break

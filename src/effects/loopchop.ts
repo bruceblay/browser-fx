@@ -24,6 +24,15 @@ export const loopChopConfig: EffectConfig = {
       unit: 'x'
     },
     {
+      key: 'tempo',
+      label: 'Tempo',
+      min: 60,
+      max: 180,
+      step: 1,
+      default: 120,
+      unit: 'bpm'
+    },
+    {
       key: 'wet',
       label: 'Dry/Wet',
       min: 0,
@@ -36,6 +45,7 @@ export const loopChopConfig: EffectConfig = {
   defaultValues: {
     loopSize: 2,        // 1/8 beat
     stutterRate: 4,     // 4x repeats
+    tempo: 120,         // BPM the loop length is derived from
     wet: 0.8            // 80% wet
   },
   sliderColor: '#DC143C', // Crimson for glitchy/rhythmic
