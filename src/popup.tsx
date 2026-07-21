@@ -809,28 +809,49 @@ function IndexPopup() {
                   </span>
                 )}
                 {chain.length > 1 && (
-                  <button
-                    onClick={() => midiLearn ? handleArmKnob(i, 'toggle') : handleToggleSlot(i)}
-                    title={midiLearn
-                      ? "Click, then press a pad or button on your MIDI device"
-                      : slot.enabled ? "Bypass this effect" : "Enable this effect"}
-                    style={{
-                      width: 11,
-                      height: 11,
-                      borderRadius: '50%',
-                      border: midiLearn
-                        ? `1px ${toggleArmed ? 'solid' : 'dashed'} ${theme.led}`
-                        : `1px solid ${theme.panelBorder}`,
-                      background: slot.enabled ? theme.led : '#232323',
-                      boxShadow: toggleArmed
-                        ? `0 0 8px ${theme.ledGlow}`
-                        : slot.enabled ? `0 0 4px ${theme.ledGlow}` : 'inset 0 1px 2px rgba(0,0,0,0.6)',
-                      cursor: 'pointer',
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: 'background 0.15s ease, box-shadow 0.15s ease'
-                    }}
-                  />
+                  <span style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    width: 21,
+                    height: 21
+                  }}>
+                    <button
+                      onClick={() => midiLearn ? handleArmKnob(i, 'toggle') : handleToggleSlot(i)}
+                      title={midiLearn
+                        ? "Click, then press a pad or button on your MIDI device"
+                        : slot.enabled ? "Bypass this effect" : "Enable this effect"}
+                      style={{
+                        width: 11,
+                        height: 11,
+                        borderRadius: '50%',
+                        border: `1px solid ${theme.panelBorder}`,
+                        background: slot.enabled ? theme.led : '#232323',
+                        boxShadow: slot.enabled ? `0 0 4px ${theme.ledGlow}` : 'inset 0 1px 2px rgba(0,0,0,0.6)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        transition: 'background 0.15s ease, box-shadow 0.15s ease'
+                      }}
+                    />
+                    {/* Learn ring around the LED, matching the knob overlays */}
+                    {midiLearn && (
+                      <span
+                        onClick={() => handleArmKnob(i, 'toggle')}
+                        title="Click, then press a pad or button on your MIDI device"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '50%',
+                          border: `1.5px ${toggleArmed ? 'solid' : 'dashed'} ${theme.led}`,
+                          boxShadow: toggleArmed ? `0 0 8px ${theme.ledGlow}` : 'none',
+                          cursor: 'pointer',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    )}
+                  </span>
                 )}
                 {chain.length > 1 && midiLearn && toggleBadge && (
                   <span style={{
