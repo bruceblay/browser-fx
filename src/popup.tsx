@@ -687,15 +687,14 @@ function IndexPopup() {
     </div>
   )
 
-  const addButton = canAdd && (
+  const renderAddButton = (placement: React.CSSProperties) => canAdd && (
     <button
       onClick={handleAddSlot}
       title="Add another effect to the chain"
       style={{
         position: 'absolute',
-        right: 0,
-        bottom: 0,
         zIndex: 2,
+        ...placement,
         background: theme.control,
         border: '1px dashed #3f3f3f',
         borderRadius: 3,
@@ -937,9 +936,11 @@ function IndexPopup() {
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 6
+                    gap: 6,
+                    position: 'relative'
                   }}>
                     {hintRow}
+                    {renderAddButton({ right: 0, top: '50%', transform: 'translateY(-50%)' })}
                   </div>
                 </div>
               )
@@ -983,7 +984,7 @@ function IndexPopup() {
             </div>
           )}
 
-          {addButton}
+          {!single && renderAddButton({ right: 0, bottom: 0 })}
         </div>
       </div>
     </div>
