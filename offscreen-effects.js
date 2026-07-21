@@ -2689,7 +2689,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({
       bands: getVisualizerBands(message.tabId),
       chain: frameState && frameState.chain
-        ? frameState.chain.map(s => ({ effectId: s.effectId, params: s.params }))
+        ? frameState.chain.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled }))
         : null,
       midi: { status: midiStatus, lastEvent: midiLastEvent }
     })
@@ -2892,14 +2892,44 @@ function initMidi() {
 }
 
 function handleMidiMessage(msg) {
-  const [statusByte, cc, value] = msg.data
-  if ((statusByte & 0xf0) !== 0xb0) return // control change messages only
+  const status = msg.data[0] & 0xf0
+  const d1 = msg.data[1]
+  const value = msg.data[2]
+  const isCc = status === 0xb0
+  const isNoteOn = status === 0x90 && value > 0
+  if (!isCc && !isNoteOn) return
+  const label = isCc ? `cc ${d1}` : `note ${d1}`
 
-  const binding = midiMappings[cc]
+  // Namespaced lookup, with tolerance for the pre-toggle plain-cc format
+  // (the popup migrates storage the next time it opens)
+  const key = isCc ? `cc_${d1}` : `note_${d1}`
+  const binding = midiMappings[key] || (isCc ? midiMappings[d1] : undefined)
   if (!binding || typeof binding !== 'object' || !binding.slotId) {
-    midiLastEvent = `cc ${cc} (unmapped)`
+    midiLastEvent = `${label} (unmapped)`
     return
   }
+
+  // Toggle bindings flip the slot's bypass gates on press
+  if (binding.kind === 'toggle') {
+    if (isCc && value < 64) return // press only, not release
+    let toggled = false
+    for (const [tabId, state] of tabAudioState) {
+      if (!state.chain) continue
+      const slotIndex = state.chain.findIndex(s => s.id === binding.slotId)
+      if (slotIndex === -1) continue
+      const slot = state.chain[slotIndex]
+      if (!slot.wetGate) continue
+      slot.enabled = !slot.enabled
+      smoothParamChange(slot.wetGate.gain, slot.enabled ? 1 : 0, 0.02, 'linear')
+      smoothParamChange(slot.dryGate.gain, slot.enabled ? 0 : 1, 0.02, 'linear')
+      midiLastEvent = `${label} -> slot ${slotIndex + 1} ${slot.enabled ? 'on' : 'off'}`
+      toggled = true
+    }
+    if (!toggled) midiLastEvent = `${label} (bound effect not active)`
+    return
+  }
+
+  if (!isCc) return // knobs need continuous CCs
 
   // Bindings name a slot instance; find where it currently lives in each
   // capturing tab's chain, so mappings follow reorders and duplicate
@@ -2924,8 +2954,8 @@ function handleMidiMessage(msg) {
     applied = true
   }
   midiLastEvent = applied
-    ? `cc ${cc} -> ${binding.slotId.slice(0, 10)} knob ${binding.knobIndex + 1}`
-    : `cc ${cc} (bound effect not in any active chain)`
+    ? `${label} -> knob ${binding.knobIndex + 1}`
+    : `${label} (bound effect not in any active chain)`
 }
 
 requestMidiMappings()

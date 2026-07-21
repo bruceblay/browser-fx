@@ -17,7 +17,12 @@ type ChainSlot = {
   enabled: boolean
 }
 
-type MidiBinding = { slotId: string; knobIndex: number }
+type MidiBinding = { slotId: string; kind: 'knob' | 'toggle'; knobIndex?: number }
+
+// Mapping keys namespace the message type: knobs bind to CCs, toggles can
+// bind to a CC button or a pad note
+const ccKey = (n: number) => `cc_${n}`
+const noteKey = (n: number) => `note_${n}`
 
 const newSlotId = () =>
   'slot_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -41,10 +46,11 @@ function IndexPopup() {
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
   const [startFailed, setStartFailed] = useState(false)
   const [midiLearn, setMidiLearn] = useState(false)
-  const [midiLearnTarget, setMidiLearnTarget] = useState<{ slot: number; knob: number } | null>(null)
+  // knob is a parameter index, or 'toggle' for the slot's bypass LED
+  const [midiLearnTarget, setMidiLearnTarget] = useState<{ slot: number; knob: number | 'toggle' } | null>(null)
   const [midiMappings, setMidiMappings] = useState<Record<string, MidiBinding>>({})
   const [midiStatus, setMidiStatus] = useState('')
-  const midiLearnTargetRef = useRef<{ slot: number; knob: number } | null>(null)
+  const midiLearnTargetRef = useRef<{ slot: number; knob: number | 'toggle' } | null>(null)
   const midiAccessRef = useRef<MIDIAccess | null>(null)
   // Suppresses knob updates from offscreen frames right after a local drag,
   // so the UI doesn't fight the user's hand
@@ -353,11 +359,18 @@ function IndexPopup() {
       .then((result) => {
         const raw = result.midiMappings || {}
         const valid: Record<string, MidiBinding> = {}
-        for (const [cc, v] of Object.entries(raw)) {
-          if (v && typeof v === 'object' && (v as MidiBinding).slotId) valid[cc] = v as MidiBinding
+        for (const [key, v] of Object.entries(raw)) {
+          const b = v as any
+          if (!b || typeof b !== 'object' || !b.slotId) continue
+          if (/^\d+$/.test(key) && b.knobIndex !== undefined) {
+            // migrate the pre-toggle format (plain cc number keys)
+            valid[ccKey(Number(key))] = { slotId: b.slotId, kind: 'knob', knobIndex: b.knobIndex }
+          } else if (b.kind === 'knob' || b.kind === 'toggle') {
+            valid[key] = b as MidiBinding
+          }
         }
         setMidiMappings(valid)
-        if (Object.keys(valid).length !== Object.keys(raw).length) {
+        if (JSON.stringify(valid) !== JSON.stringify(raw)) {
           chrome.storage.local.set({ midiMappings: valid })
         }
       })
@@ -400,7 +413,7 @@ function IndexPopup() {
     setMidiLearn(true)
   }
 
-  const handleArmKnob = (slotIndex: number, knobIndex: number) => {
+  const handleArmKnob = (slotIndex: number, knobIndex: number | 'toggle') => {
     const target = { slot: slotIndex, knob: knobIndex }
     setMidiLearnTarget(target)
     midiLearnTargetRef.current = target
@@ -426,31 +439,50 @@ function IndexPopup() {
   chainRef.current = chain
   const handleParamUpdateRef = useRef<(slotIndex: number, param: string, value: number) => void>(() => {})
   handleParamUpdateRef.current = handleParamUpdate
+  const handleToggleSlotRef = useRef<(slotIndex: number) => void>(() => {})
+  handleToggleSlotRef.current = handleToggleSlot
 
   useEffect(() => {
     let cancelled = false
     let access: MIDIAccess | null = null
 
     const handler = (msg: MIDIMessageEvent) => {
-      if (!msg.data || (msg.data[0] & 0xf0) !== 0xb0) return
-      const cc = msg.data[1]
+      if (!msg.data) return
+      const status = msg.data[0] & 0xf0
+      const d1 = msg.data[1]
+      const d2 = msg.data[2]
+      const isCc = status === 0xb0
+      const isNoteOn = status === 0x90 && d2 > 0
+      if (!isCc && !isNoteOn) return
 
-      // Learn mode with an armed knob: bind this CC to that slot instance
+      const saveMappings = (next: Record<string, MidiBinding>) => {
+        chrome.storage.local.set({ midiMappings: next })
+        return next
+      }
+
+      // Learn mode with an armed target: bind this message to the instance.
+      // Knobs need continuous CCs; toggles accept a CC button or a pad note.
       const target = midiLearnTargetRef.current
       if (target !== null) {
         const slot = chainRef.current[target.slot]
         if (!slot) return
-        const binding: MidiBinding = { slotId: slot.id, knobIndex: target.knob }
+        const isToggle = target.knob === 'toggle'
+        if (!isToggle && !isCc) return
+        if (isToggle && isCc && d2 < 64) return // bind on press, not release
+        const key = isCc ? ccKey(d1) : noteKey(d1)
+        const binding: MidiBinding = isToggle
+          ? { slotId: slot.id, kind: 'toggle' }
+          : { slotId: slot.id, kind: 'knob', knobIndex: target.knob as number }
         setMidiMappings(prev => {
-          // Reassigning a knob replaces its old CC binding entirely
+          // Reassigning a control replaces its old binding entirely
           const next: Record<string, MidiBinding> = {}
-          for (const [prevCc, b] of Object.entries(prev)) {
-            if (b.slotId === binding.slotId && b.knobIndex === binding.knobIndex) continue
-            next[prevCc] = b
+          for (const [prevKey, b] of Object.entries(prev)) {
+            if (b.slotId === binding.slotId && b.kind === binding.kind &&
+                (binding.kind === 'toggle' || b.knobIndex === binding.knobIndex)) continue
+            next[prevKey] = b
           }
-          next[cc] = binding
-          chrome.storage.local.set({ midiMappings: next })
-          return next
+          next[key] = binding
+          return saveMappings(next)
         })
         midiLearnTargetRef.current = null
         setMidiLearnTarget(null)
@@ -459,14 +491,23 @@ function IndexPopup() {
 
       // Normal control: the binding names a slot instance; find where it
       // currently sits in the chain (it follows reorders)
-      const binding = midiMappingsRef.current[cc]
+      const key = isCc ? ccKey(d1) : noteKey(d1)
+      const binding = midiMappingsRef.current[key]
       if (!binding) return
       const slotIndex = chainRef.current.findIndex(s => s.id === binding.slotId)
       if (slotIndex === -1) return
+
+      if (binding.kind === 'toggle') {
+        if (isCc && d2 < 64) return // trigger on press only
+        handleToggleSlotRef.current(slotIndex)
+        return
+      }
+
+      if (!isCc) return
       const slot = chainRef.current[slotIndex]
-      const spec = getEffectConfig(slot.effectId)?.parameters[binding.knobIndex]
+      const spec = getEffectConfig(slot.effectId)?.parameters[binding.knobIndex!]
       if (!spec) return
-      let value = spec.min + (msg.data[2] / 127) * (spec.max - spec.min)
+      let value = spec.min + (d2 / 127) * (spec.max - spec.min)
       if (spec.step) value = Math.round(value / spec.step) * spec.step
       value = Math.max(spec.min, Math.min(spec.max, value))
       handleParamUpdateRef.current(slotIndex, spec.key, value)
@@ -504,7 +545,7 @@ function IndexPopup() {
   // Mirror parameter changes made by MIDI hardware (reported on visualizer
   // frames) onto the knobs, unless the user just moved one locally
   const handleVisualizerFrame = (
-    frameChain: Array<{ effectId: string; params: Record<string, number> }> | null,
+    frameChain: Array<{ effectId: string; params: Record<string, number>; enabled?: boolean }> | null,
     midi: { status: string; lastEvent: string } | null
   ) => {
     if (midi) {
@@ -516,13 +557,20 @@ function IndexPopup() {
       const next = prev.map((slot, i) => {
         const incoming = frameChain[i]
         if (!incoming || incoming.effectId !== slot.effectId || !incoming.params) return slot
+        let updated = slot
+        // Hardware pad toggles flip enabled in the engine; reflect it here
+        if (incoming.enabled !== undefined && incoming.enabled !== slot.enabled) {
+          changed = true
+          updated = { ...updated, enabled: incoming.enabled }
+        }
         for (const key of Object.keys(slot.params)) {
           if (incoming.params[key] !== undefined && Math.abs(incoming.params[key] - slot.params[key]) > 1e-9) {
             changed = true
-            return { ...slot, params: { ...slot.params, ...incoming.params } }
+            updated = { ...updated, params: { ...updated.params, ...incoming.params } }
+            break
           }
         }
-        return slot
+        return updated
       })
       return changed ? next : prev
     })
@@ -727,9 +775,16 @@ function IndexPopup() {
             // Bindings for this slot instance, in the cc -> knob shape the
             // knob row renders as badges
             const slotCcMap: Record<string, number> = {}
-            for (const [cc, b] of Object.entries(midiMappings)) {
-              if (b.slotId === slot.id) slotCcMap[cc] = b.knobIndex
+            let toggleBadge: string | null = null
+            for (const [key, b] of Object.entries(midiMappings)) {
+              if (b.slotId !== slot.id) continue
+              if (b.kind === 'knob' && key.startsWith('cc_')) {
+                slotCcMap[key.slice(3)] = b.knobIndex!
+              } else if (b.kind === 'toggle') {
+                toggleBadge = key.startsWith('cc_') ? `cc ${key.slice(3)}` : `n ${key.slice(5)}`
+              }
             }
+            const toggleArmed = midiLearn && midiLearnTarget?.slot === i && midiLearnTarget.knob === 'toggle'
 
             const selectorRow = (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -755,21 +810,38 @@ function IndexPopup() {
                 )}
                 {chain.length > 1 && (
                   <button
-                    onClick={() => handleToggleSlot(i)}
-                    title={slot.enabled ? "Bypass this effect" : "Enable this effect"}
+                    onClick={() => midiLearn ? handleArmKnob(i, 'toggle') : handleToggleSlot(i)}
+                    title={midiLearn
+                      ? "Click, then press a pad or button on your MIDI device"
+                      : slot.enabled ? "Bypass this effect" : "Enable this effect"}
                     style={{
                       width: 11,
                       height: 11,
                       borderRadius: '50%',
-                      border: `1px solid ${theme.panelBorder}`,
+                      border: midiLearn
+                        ? `1px ${toggleArmed ? 'solid' : 'dashed'} ${theme.led}`
+                        : `1px solid ${theme.panelBorder}`,
                       background: slot.enabled ? theme.led : '#232323',
-                      boxShadow: slot.enabled ? `0 0 4px ${theme.ledGlow}` : 'inset 0 1px 2px rgba(0,0,0,0.6)',
+                      boxShadow: toggleArmed
+                        ? `0 0 8px ${theme.ledGlow}`
+                        : slot.enabled ? `0 0 4px ${theme.ledGlow}` : 'inset 0 1px 2px rgba(0,0,0,0.6)',
                       cursor: 'pointer',
                       padding: 0,
                       flexShrink: 0,
                       transition: 'background 0.15s ease, box-shadow 0.15s ease'
                     }}
                   />
+                )}
+                {chain.length > 1 && midiLearn && toggleBadge && (
+                  <span style={{
+                    fontSize: 8,
+                    color: theme.led,
+                    letterSpacing: '0.3px',
+                    userSelect: 'none',
+                    flexShrink: 0
+                  }}>
+                    {toggleBadge}
+                  </span>
                 )}
                 <div style={{ flex: 1 }}>
                   <EffectSelector
@@ -815,7 +887,7 @@ function IndexPopup() {
                   isCapturing={isCapturing}
                   knobSize={knobSize}
                   midiLearn={midiLearn}
-                  midiLearnTarget={midiLearnTarget?.slot === i ? midiLearnTarget.knob : null}
+                  midiLearnTarget={midiLearnTarget?.slot === i && typeof midiLearnTarget.knob === 'number' ? midiLearnTarget.knob : null}
                   midiMappings={slotCcMap}
                   onArmKnob={(knob) => handleArmKnob(i, knob)}
                   onParamUpdate={(param, value) => handleParamUpdate(i, param, value)}
@@ -865,7 +937,6 @@ function IndexPopup() {
                   zIndex: dragging ? 5 : 1,
                   opacity: dragging ? 0.92 : 1,
                   boxShadow: dragging ? '0 4px 14px rgba(0,0,0,0.55)' : 'none',
-                  borderRadius: 4,
                   background: dragging ? theme.panel : 'transparent',
                   // Green edge marks where the dragged slot will land
                   borderTop: dropTarget && dragDy < 0 ? `2px solid ${theme.led}` : '2px solid transparent',
