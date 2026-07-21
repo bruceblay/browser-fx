@@ -115,7 +115,7 @@ function cleanupTabState(tabId) {
   if (state.chain) {
     for (const slot of state.chain) {
       try {
-        effectOutput(slot.effect).disconnect()
+        (slot.outGain || effectOutput(slot.effect)).disconnect()
       } catch (error) {
         console.warn("Error disconnecting effect:", error)
       }
@@ -2115,12 +2115,35 @@ function buildChainForTab(chainSpec, tabId) {
     newChain = chainSpec.map((slotSpec) => {
       const liveParams = {}
       const effect = createEffect(slotSpec.effectId, slotSpec.params || {}, liveParams)
+      const enabled = slotSpec.enabled !== false
+
+      // Per-slot bypass wrapper: the input feeds both the effect and a dry
+      // route, and two gates crossfade between them so toggling never clicks.
+      // The effect keeps running while bypassed, preserving its state.
+      const inGain = audioContext.createGain()
+      const outGain = audioContext.createGain()
+      const wetGate = audioContext.createGain()
+      const dryGate = audioContext.createGain()
+      inGain.connect(effectInput(effect))
+      effectOutput(effect).connect(wetGate)
+      wetGate.connect(outGain)
+      inGain.connect(dryGate)
+      dryGate.connect(outGain)
+      wetGate.gain.value = enabled ? 1 : 0
+      dryGate.gain.value = enabled ? 0 : 1
+
       return {
+        id: slotSpec.id || null,
         effectId: slotSpec.effectId,
         effect,
         liveParams,
         params: { ...(slotSpec.params || {}) },
-        paramSpecs: slotSpec.paramSpecs || null
+        paramSpecs: slotSpec.paramSpecs || null,
+        enabled,
+        inGain,
+        outGain,
+        wetGate,
+        dryGate
       }
     })
   } catch (error) {
@@ -2128,9 +2151,9 @@ function buildChainForTab(chainSpec, tabId) {
     throw error
   }
 
-  // Wire the slots together
+  // Wire the slots together through their bypass wrappers
   for (let i = 0; i < newChain.length - 1; i++) {
-    effectOutput(newChain[i].effect).connect(effectInput(newChain[i + 1].effect))
+    newChain[i].outGain.connect(newChain[i + 1].inGain)
   }
 
   const oldChain = state.chain || []
@@ -2148,37 +2171,37 @@ function buildChainForTab(chainSpec, tabId) {
         newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeTime)
 
         // Route the old chain's tail through the fade-out gain
-        const oldTail = effectOutput(oldChain[oldChain.length - 1].effect)
+        const oldTail = oldChain[oldChain.length - 1].outGain || effectOutput(oldChain[oldChain.length - 1].effect)
         oldTail.disconnect()
         oldTail.connect(oldGain)
         oldGain.connect(state.destinationNode)
 
         // Bring the new chain in through the fade-in gain
-        state.sourceNode.connect(effectInput(newChain[0].effect))
-        effectOutput(newChain[newChain.length - 1].effect).connect(newGain)
+        state.sourceNode.connect(newChain[0].inGain)
+        newChain[newChain.length - 1].outGain.connect(newGain)
         newGain.connect(state.destinationNode)
 
         // Tear the old chain down once the fade completes
-        const oldHead = effectInput(oldChain[0].effect)
+        const oldHead = oldChain[0].inGain || effectInput(oldChain[0].effect)
         const sourceNode = state.sourceNode
         setTimeout(() => {
           try { sourceNode.disconnect(oldHead) } catch (e) {}
           try { oldGain.disconnect() } catch (e) {}
           for (const slot of oldChain) {
-            try { effectOutput(slot.effect).disconnect() } catch (e) {}
+            try { (slot.outGain || effectOutput(slot.effect)).disconnect() } catch (e) {}
           }
         }, crossfadeTime * 1000 + 100)
       } catch (error) {
         console.error(`\u{1F3B5} ERROR during chain crossfade for tab ${tabId}:`, error)
         try {
           state.sourceNode.disconnect()
-          state.sourceNode.connect(effectInput(newChain[0].effect))
-          effectOutput(newChain[newChain.length - 1].effect).connect(state.destinationNode)
+          state.sourceNode.connect(newChain[0].inGain)
+          newChain[newChain.length - 1].outGain.connect(state.destinationNode)
         } catch (e) {}
       }
     } else {
-      state.sourceNode.connect(effectInput(newChain[0].effect))
-      effectOutput(newChain[newChain.length - 1].effect).connect(state.destinationNode)
+      state.sourceNode.connect(newChain[0].inGain)
+      newChain[newChain.length - 1].outGain.connect(state.destinationNode)
     }
   }
 
@@ -2196,7 +2219,7 @@ function scheduleChainRebuild(tabId) {
     state._rebuildTimer = null
     if (!tabAudioState.has(tabId) || !state.chain || !state.chain.length) return
     buildChainForTab(
-      state.chain.map(s => ({ effectId: s.effectId, params: s.params, paramSpecs: s.paramSpecs })),
+      state.chain.map(s => ({ id: s.id, effectId: s.effectId, params: s.params, paramSpecs: s.paramSpecs, enabled: s.enabled })),
       tabId
     )
   }, 150)
@@ -2745,6 +2768,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return
   }
 
+  if (message.type === "SET_SLOT_ENABLED") {
+    // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
+    if (message.tabId === undefined) return
+    const toggleState = tabAudioState.get(message.tabId)
+    const toggleSlot = toggleState && toggleState.chain && toggleState.chain[message.slotIndex]
+    if (!toggleSlot || !toggleSlot.wetGate) return
+    toggleSlot.enabled = !!message.enabled
+    smoothParamChange(toggleSlot.wetGate.gain, toggleSlot.enabled ? 1 : 0, 0.02, 'linear')
+    smoothParamChange(toggleSlot.dryGate.gain, toggleSlot.enabled ? 0 : 1, 0.02, 'linear')
+    console.log(`\u{1F3B5} Slot ${message.slotIndex} ${toggleSlot.enabled ? 'enabled' : 'bypassed'} for tab ${message.tabId}`)
+    sendResponse({ success: true, message: "Slot toggled" })
+    return
+  }
+
   if (message.type === "SET_CHAIN") {
     // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
     if (message.tabId === undefined) return
@@ -2858,19 +2895,22 @@ function handleMidiMessage(msg) {
   const [statusByte, cc, value] = msg.data
   if ((statusByte & 0xf0) !== 0xb0) return // control change messages only
 
-  const knobIndex = midiMappings[cc]
-  if (knobIndex === undefined) {
+  const binding = midiMappings[cc]
+  if (!binding || typeof binding !== 'object' || !binding.slotId) {
     midiLastEvent = `cc ${cc} (unmapped)`
     return
   }
 
-  // Apply to slot 1 of every capturing tab's chain. Hardware control is
-  // deliberately confined to the first effect so one CC never fans out
-  // across every slot.
+  // Bindings name a slot instance; find where it currently lives in each
+  // capturing tab's chain, so mappings follow reorders and duplicate
+  // effects stay independently controllable
   let applied = false
   for (const [tabId, state] of tabAudioState) {
-    const slot = state.chain && state.chain[0]
-    const spec = slot && slot.paramSpecs && slot.paramSpecs[knobIndex]
+    if (!state.chain) continue
+    const slotIndex = state.chain.findIndex(s => s.id === binding.slotId)
+    if (slotIndex === -1) continue
+    const slot = state.chain[slotIndex]
+    const spec = slot.paramSpecs && slot.paramSpecs[binding.knobIndex]
     if (!spec || !slot.effect) continue
 
     let paramValue = spec.min + (value / 127) * (spec.max - spec.min)
@@ -2880,12 +2920,12 @@ function handleMidiMessage(msg) {
     paramValue = Math.max(spec.min, Math.min(spec.max, paramValue))
     if (!Number.isFinite(paramValue)) continue
 
-    updateEffectParamsForTab(slot.effectId, { [spec.key]: paramValue }, tabId, 0)
+    updateEffectParamsForTab(slot.effectId, { [spec.key]: paramValue }, tabId, slotIndex)
     applied = true
   }
   midiLastEvent = applied
-    ? `cc ${cc} -> knob ${knobIndex + 1}`
-    : `cc ${cc} -> knob ${knobIndex + 1} (no active capture)`
+    ? `cc ${cc} -> ${binding.slotId.slice(0, 10)} knob ${binding.knobIndex + 1}`
+    : `cc ${cc} (bound effect not in any active chain)`
 }
 
 requestMidiMappings()

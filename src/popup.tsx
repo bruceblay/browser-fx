@@ -9,17 +9,26 @@ import { getEffectConfig, getEffectDefaults } from "./effects"
 import { theme } from "./theme"
 
 type ChainSlot = {
+  // Stable instance identity: midi mappings bind to this, so they follow the
+  // slot through reorders and distinguish duplicate effects
+  id: string
   effectId: string
   params: Record<string, number>
   enabled: boolean
 }
 
+type MidiBinding = { slotId: string; knobIndex: number }
+
+const newSlotId = () =>
+  'slot_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+
 const MAX_CHAIN = 4
 // Knobs shrink as the chain grows to conserve vertical space
 const KNOB_SIZES = [68, 56, 48, 44]
-const POPUP_HEIGHTS = [260, 345, 445, 520]
+const POPUP_HEIGHTS = [260, 330, 430, 515]
 
 const defaultSlot = (effectId: string): ChainSlot => ({
+  id: newSlotId(),
   effectId,
   params: getEffectDefaults(effectId),
   enabled: true
@@ -32,10 +41,10 @@ function IndexPopup() {
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
   const [startFailed, setStartFailed] = useState(false)
   const [midiLearn, setMidiLearn] = useState(false)
-  const [midiLearnTarget, setMidiLearnTarget] = useState<number | null>(null)
-  const [midiMappings, setMidiMappings] = useState<Record<string, number>>({})
+  const [midiLearnTarget, setMidiLearnTarget] = useState<{ slot: number; knob: number } | null>(null)
+  const [midiMappings, setMidiMappings] = useState<Record<string, MidiBinding>>({})
   const [midiStatus, setMidiStatus] = useState('')
-  const midiLearnTargetRef = useRef<number | null>(null)
+  const midiLearnTargetRef = useRef<{ slot: number; knob: number } | null>(null)
   const midiAccessRef = useRef<MIDIAccess | null>(null)
   // Suppresses knob updates from offscreen frames right after a local drag,
   // so the UI doesn't fight the user's hand
@@ -46,7 +55,9 @@ function IndexPopup() {
   // The footer hint only renders when idle or in learn mode; reclaim its
   // space while capturing so chains end snug against the bottom
   const showFooterHint = midiLearn || !isCapturing
-  const popupHeight = POPUP_HEIGHTS[chain.length - 1] - (single || showFooterHint ? 0 : 24)
+  // The add button floats bottom-right and hides during learn mode
+  const canAdd = chain.length < MAX_CHAIN && !midiLearn
+  const popupHeight = POPUP_HEIGHTS[chain.length - 1] - (!single && !showFooterHint && !canAdd ? 22 : 0)
 
   // Knob order and ranges for an effect, sent to the offscreen document so
   // MIDI CC values can be scaled onto the right parameters
@@ -56,7 +67,7 @@ function IndexPopup() {
     }))
 
   const chainWithSpecs = (c: ChainSlot[]) =>
-    c.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled, paramSpecs: paramSpecsFor(s.effectId) }))
+    c.map(s => ({ id: s.id, effectId: s.effectId, params: s.params, enabled: s.enabled, paramSpecs: paramSpecsFor(s.effectId) }))
 
   const sendChain = (c: ChainSlot[]) => {
     chrome.runtime.sendMessage({ type: "SET_CHAIN", chain: chainWithSpecs(c) })
@@ -97,6 +108,7 @@ function IndexPopup() {
                 .filter((s: any) => s && getEffectConfig(s.effectId))
                 .slice(0, MAX_CHAIN)
                 .map((s: any) => ({
+                  id: s.id || newSlotId(),
                   effectId: s.effectId,
                   params: s.params || getEffectDefaults(s.effectId),
                   enabled: s.enabled !== false
@@ -107,6 +119,7 @@ function IndexPopup() {
               const effectExists = getEffectConfig(savedState.selectedEffect)
               const effectId = effectExists ? savedState.selectedEffect : "bitcrusher"
               setChain([{
+                id: newSlotId(),
                 effectId,
                 params: effectExists && savedState.effectParams
                   ? savedState.effectParams
@@ -171,8 +184,12 @@ function IndexPopup() {
   }, [])
 
   const handleEffectChange = (slotIndex: number, effectId: string) => {
+    // A new effect in a slot is a new instrument: fresh instance id, and any
+    // bindings to the old instance are retired
+    const oldId = chain[slotIndex]?.id
     const newChain = chain.map((s, i) => i === slotIndex ? defaultSlot(effectId) : s)
     setChain(newChain)
+    if (oldId) purgeMappingsForSlot(oldId)
     if (isCapturing) sendChain(newChain)
   }
 
@@ -201,6 +218,8 @@ function IndexPopup() {
 
   const handleRemoveSlot = (slotIndex: number) => {
     if (chain.length <= 1) return
+    const removedId = chain[slotIndex]?.id
+    if (removedId) purgeMappingsForSlot(removedId)
     let newChain = chain.filter((_, i) => i !== slotIndex)
     // A lone slot has no toggle, so never leave it silently bypassed
     if (newChain.length === 1 && !newChain[0].enabled) {
@@ -326,12 +345,38 @@ function IndexPopup() {
     })
   }
 
-  // Load saved MIDI mappings (CC number -> knob index)
+  // Load saved MIDI mappings (CC number -> { slotId, knobIndex }). Entries in
+  // the old positional format (plain numbers) are discarded; re-learn binds
+  // them to a slot instance.
   useEffect(() => {
     chrome.storage.local.get(['midiMappings'])
-      .then((result) => setMidiMappings(result.midiMappings || {}))
+      .then((result) => {
+        const raw = result.midiMappings || {}
+        const valid: Record<string, MidiBinding> = {}
+        for (const [cc, v] of Object.entries(raw)) {
+          if (v && typeof v === 'object' && (v as MidiBinding).slotId) valid[cc] = v as MidiBinding
+        }
+        setMidiMappings(valid)
+        if (Object.keys(valid).length !== Object.keys(raw).length) {
+          chrome.storage.local.set({ midiMappings: valid })
+        }
+      })
       .catch(() => {})
   }, [])
+
+  // Drop bindings for a slot instance that no longer exists
+  const purgeMappingsForSlot = (slotId: string) => {
+    setMidiMappings(prev => {
+      const next: Record<string, MidiBinding> = {}
+      let dropped = false
+      for (const [cc, binding] of Object.entries(prev)) {
+        if (binding.slotId === slotId) { dropped = true; continue }
+        next[cc] = binding
+      }
+      if (dropped) chrome.storage.local.set({ midiMappings: next })
+      return dropped ? next : prev
+    })
+  }
 
   const handleMidiClick = async () => {
     if (midiLearn) {
@@ -355,9 +400,10 @@ function IndexPopup() {
     setMidiLearn(true)
   }
 
-  const handleArmKnob = (index: number) => {
-    setMidiLearnTarget(index)
-    midiLearnTargetRef.current = index
+  const handleArmKnob = (slotIndex: number, knobIndex: number) => {
+    const target = { slot: slotIndex, knob: knobIndex }
+    setMidiLearnTarget(target)
+    midiLearnTargetRef.current = target
   }
 
   // Wipe all mappings and reopen the setup page for a clean slate
@@ -389,16 +435,20 @@ function IndexPopup() {
       if (!msg.data || (msg.data[0] & 0xf0) !== 0xb0) return
       const cc = msg.data[1]
 
-      // Learn mode with an armed knob: bind and consume this CC
+      // Learn mode with an armed knob: bind this CC to that slot instance
       const target = midiLearnTargetRef.current
       if (target !== null) {
+        const slot = chainRef.current[target.slot]
+        if (!slot) return
+        const binding: MidiBinding = { slotId: slot.id, knobIndex: target.knob }
         setMidiMappings(prev => {
           // Reassigning a knob replaces its old CC binding entirely
-          const next: Record<string, number> = {}
-          for (const [prevCc, knob] of Object.entries(prev)) {
-            if (knob !== target) next[prevCc] = knob
+          const next: Record<string, MidiBinding> = {}
+          for (const [prevCc, b] of Object.entries(prev)) {
+            if (b.slotId === binding.slotId && b.knobIndex === binding.knobIndex) continue
+            next[prevCc] = b
           }
-          next[cc] = target
+          next[cc] = binding
           chrome.storage.local.set({ midiMappings: next })
           return next
         })
@@ -407,16 +457,19 @@ function IndexPopup() {
         return
       }
 
-      // Normal control: scale the CC onto the mapped knob of slot 1
-      const knobIndex = midiMappingsRef.current[cc]
-      if (knobIndex === undefined) return
-      const slot0 = chainRef.current[0]
-      const spec = slot0 && getEffectConfig(slot0.effectId)?.parameters[knobIndex]
+      // Normal control: the binding names a slot instance; find where it
+      // currently sits in the chain (it follows reorders)
+      const binding = midiMappingsRef.current[cc]
+      if (!binding) return
+      const slotIndex = chainRef.current.findIndex(s => s.id === binding.slotId)
+      if (slotIndex === -1) return
+      const slot = chainRef.current[slotIndex]
+      const spec = getEffectConfig(slot.effectId)?.parameters[binding.knobIndex]
       if (!spec) return
       let value = spec.min + (msg.data[2] / 127) * (spec.max - spec.min)
       if (spec.step) value = Math.round(value / spec.step) * spec.step
       value = Math.max(spec.min, Math.min(spec.max, value))
-      handleParamUpdateRef.current(0, spec.key, value)
+      handleParamUpdateRef.current(slotIndex, spec.key, value)
     }
 
     const attach = (a: MIDIAccess) => {
@@ -586,15 +639,19 @@ function IndexPopup() {
     </div>
   )
 
-  const addButton = chain.length < MAX_CHAIN && (
+  const addButton = canAdd && (
     <button
       onClick={handleAddSlot}
       title="Add another effect to the chain"
       style={{
+        position: 'absolute',
+        right: 0,
+        bottom: 0,
+        zIndex: 2,
         background: theme.control,
         border: '1px dashed #3f3f3f',
         borderRadius: 3,
-        padding: '4px 16px',
+        padding: '3px 10px',
         fontFamily: 'inherit',
         fontSize: 10,
         fontWeight: 600,
@@ -603,7 +660,6 @@ function IndexPopup() {
         letterSpacing: '0.4px',
         cursor: 'pointer',
         userSelect: 'none',
-        alignSelf: 'center',
         transition: 'color 0.15s ease, border-color 0.15s ease'
       }}
       onMouseOver={(e) => {
@@ -665,9 +721,15 @@ function IndexPopup() {
         }}>
           {chain.map((slot, i) => {
             const config = getEffectConfig(slot.effectId)
-            const isFirst = i === 0
             const dragging = dragFrom === i
             const dropTarget = dragFrom !== null && !dragging && dragTargetIndex() === i
+
+            // Bindings for this slot instance, in the cc -> knob shape the
+            // knob row renders as badges
+            const slotCcMap: Record<string, number> = {}
+            for (const [cc, b] of Object.entries(midiMappings)) {
+              if (b.slotId === slot.id) slotCcMap[cc] = b.knobIndex
+            }
 
             const selectorRow = (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -679,7 +741,7 @@ function IndexPopup() {
                     title="Drag to reorder"
                     style={{
                       color: theme.textFaint,
-                      fontSize: 12,
+                      fontSize: 16,
                       lineHeight: 1,
                       cursor: dragging ? 'grabbing' : 'grab',
                       touchAction: 'none',
@@ -720,13 +782,13 @@ function IndexPopup() {
                     onClick={() => handleRemoveSlot(i)}
                     title="Remove this effect from the chain"
                     style={{
-                      width: 20,
-                      height: 20,
+                      width: 24,
+                      height: 24,
                       borderRadius: 3,
                       border: `1px solid ${theme.controlBorder}`,
                       background: theme.control,
                       color: theme.textFaint,
-                      fontSize: 11,
+                      fontSize: 14,
                       lineHeight: 1,
                       cursor: 'pointer',
                       padding: 0,
@@ -752,10 +814,10 @@ function IndexPopup() {
                   effectParams={slot.params}
                   isCapturing={isCapturing}
                   knobSize={knobSize}
-                  midiLearn={midiLearn && isFirst}
-                  midiLearnTarget={midiLearnTarget}
-                  midiMappings={midiMappings}
-                  onArmKnob={handleArmKnob}
+                  midiLearn={midiLearn}
+                  midiLearnTarget={midiLearnTarget?.slot === i ? midiLearnTarget.knob : null}
+                  midiMappings={slotCcMap}
+                  onArmKnob={(knob) => handleArmKnob(i, knob)}
                   onParamUpdate={(param, value) => handleParamUpdate(i, param, value)}
                 />
               </div>
@@ -784,7 +846,6 @@ function IndexPopup() {
                     justifyContent: 'center',
                     gap: 6
                   }}>
-                    {addButton}
                     {hintRow}
                   </div>
                 </div>
@@ -812,13 +873,12 @@ function IndexPopup() {
                 }}
               >
                 {selectorRow}
-                {isFirst && learnTextRow}
                 {knobs}
               </div>
             )
           })}
 
-          {!single && (addButton || showFooterHint) && (
+          {!single && showFooterHint && (
             <div style={{
               marginTop: 'auto',
               display: 'flex',
@@ -826,10 +886,12 @@ function IndexPopup() {
               gap: 4,
               paddingTop: 2
             }}>
-              {addButton}
-              {showFooterHint && hintRow}
+              {midiLearn && learnTextRow}
+              {hintRow}
             </div>
           )}
+
+          {addButton}
         </div>
       </div>
     </div>
