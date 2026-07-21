@@ -30,7 +30,7 @@ const newSlotId = () =>
 const MAX_CHAIN = 4
 // Knobs shrink as the chain grows to conserve vertical space
 const KNOB_SIZES = [68, 56, 48, 44]
-const POPUP_HEIGHTS = [260, 330, 430, 515]
+const POPUP_HEIGHTS = [246, 330, 430, 515]
 
 const defaultSlot = (effectId: string): ChainSlot => ({
   id: newSlotId(),
