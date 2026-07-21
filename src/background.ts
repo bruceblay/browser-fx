@@ -180,6 +180,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return
   }
 
+  if (message.type === "SET_SLOT_ENABLED") {
+    forwardWithActiveTab({
+      type: "SET_SLOT_ENABLED",
+      slotIndex: message.slotIndex,
+      enabled: message.enabled
+    })
+    sendResponse({ success: true, message: "Slot toggled" })
+    return
+  }
+
   if (message.type === "SET_CHAIN") {
     console.log("Processing SET_CHAIN request:", (message.chain || []).length, "slots")
     forwardWithActiveTab({

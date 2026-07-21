@@ -11,16 +11,18 @@ import { theme } from "./theme"
 type ChainSlot = {
   effectId: string
   params: Record<string, number>
+  enabled: boolean
 }
 
 const MAX_CHAIN = 4
 // Knobs shrink as the chain grows to conserve vertical space
 const KNOB_SIZES = [68, 56, 48, 44]
-const POPUP_HEIGHTS = [260, 335, 435, 535]
+const POPUP_HEIGHTS = [260, 345, 445, 520]
 
 const defaultSlot = (effectId: string): ChainSlot => ({
   effectId,
-  params: getEffectDefaults(effectId)
+  params: getEffectDefaults(effectId),
+  enabled: true
 })
 
 function IndexPopup() {
@@ -41,7 +43,10 @@ function IndexPopup() {
 
   const single = chain.length === 1
   const knobSize = KNOB_SIZES[chain.length - 1]
-  const popupHeight = POPUP_HEIGHTS[chain.length - 1]
+  // The footer hint only renders when idle or in learn mode; reclaim its
+  // space while capturing so chains end snug against the bottom
+  const showFooterHint = midiLearn || !isCapturing
+  const popupHeight = POPUP_HEIGHTS[chain.length - 1] - (single || showFooterHint ? 0 : 24)
 
   // Knob order and ranges for an effect, sent to the offscreen document so
   // MIDI CC values can be scaled onto the right parameters
@@ -51,7 +56,7 @@ function IndexPopup() {
     }))
 
   const chainWithSpecs = (c: ChainSlot[]) =>
-    c.map(s => ({ effectId: s.effectId, params: s.params, paramSpecs: paramSpecsFor(s.effectId) }))
+    c.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled, paramSpecs: paramSpecsFor(s.effectId) }))
 
   const sendChain = (c: ChainSlot[]) => {
     chrome.runtime.sendMessage({ type: "SET_CHAIN", chain: chainWithSpecs(c) })
@@ -93,7 +98,8 @@ function IndexPopup() {
                 .slice(0, MAX_CHAIN)
                 .map((s: any) => ({
                   effectId: s.effectId,
-                  params: s.params || getEffectDefaults(s.effectId)
+                  params: s.params || getEffectDefaults(s.effectId),
+                  enabled: s.enabled !== false
                 }))
               if (valid.length) setChain(valid)
             } else if (savedState.selectedEffect) {
@@ -104,7 +110,8 @@ function IndexPopup() {
                 effectId,
                 params: effectExists && savedState.effectParams
                   ? savedState.effectParams
-                  : getEffectDefaults(effectId)
+                  : getEffectDefaults(effectId),
+                enabled: true
               }])
             }
 
@@ -194,9 +201,64 @@ function IndexPopup() {
 
   const handleRemoveSlot = (slotIndex: number) => {
     if (chain.length <= 1) return
-    const newChain = chain.filter((_, i) => i !== slotIndex)
+    let newChain = chain.filter((_, i) => i !== slotIndex)
+    // A lone slot has no toggle, so never leave it silently bypassed
+    if (newChain.length === 1 && !newChain[0].enabled) {
+      newChain = [{ ...newChain[0], enabled: true }]
+    }
     setChain(newChain)
     if (isCapturing) sendChain(newChain)
+  }
+
+  const handleToggleSlot = (slotIndex: number) => {
+    const enabled = !chain[slotIndex].enabled
+    setChain(prev => prev.map((s, i) => i === slotIndex ? { ...s, enabled } : s))
+    if (isCapturing) {
+      chrome.runtime.sendMessage({ type: "SET_SLOT_ENABLED", slotIndex, enabled })
+    }
+  }
+
+  // Drag-to-reorder: the handle drags its slot vertically; slots are uniform
+  // height in chain mode, so the drop target falls out of the travel distance
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const [dragDy, setDragDy] = useState(0)
+  const dragInfo = useRef<{ from: number; startY: number; slotH: number } | null>(null)
+  const slotRefs = useRef<Array<HTMLDivElement | null>>([])
+
+  const dragTargetIndex = () => {
+    const info = dragInfo.current
+    if (!info) return null
+    return Math.max(0, Math.min(chain.length - 1, info.from + Math.round(dragDy / info.slotH)))
+  }
+
+  const handleDragStart = (e: React.PointerEvent, index: number) => {
+    const el = slotRefs.current[index]
+    const slotH = el ? el.getBoundingClientRect().height + 10 : 100
+    dragInfo.current = { from: index, startY: e.clientY, slotH }
+    setDragFrom(index)
+    setDragDy(0)
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const handleDragMove = (e: React.PointerEvent) => {
+    if (!dragInfo.current) return
+    setDragDy(e.clientY - dragInfo.current.startY)
+  }
+
+  const handleDragEnd = () => {
+    const info = dragInfo.current
+    if (!info) return
+    const target = dragTargetIndex()
+    dragInfo.current = null
+    setDragFrom(null)
+    setDragDy(0)
+    if (target !== null && target !== info.from) {
+      const newChain = [...chain]
+      const [moved] = newChain.splice(info.from, 1)
+      newChain.splice(target, 0, moved)
+      setChain(newChain)
+      if (isCapturing) sendChain(newChain)
+    }
   }
 
   // Blocks stop/start toggling while a START_CAPTURE is still in flight.
@@ -599,14 +661,54 @@ function IndexPopup() {
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
-          gap: single ? 0 : 10
+          gap: single ? 0 : 14
         }}>
           {chain.map((slot, i) => {
             const config = getEffectConfig(slot.effectId)
             const isFirst = i === 0
+            const dragging = dragFrom === i
+            const dropTarget = dragFrom !== null && !dragging && dragTargetIndex() === i
 
             const selectorRow = (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {chain.length > 1 && (
+                  <span
+                    onPointerDown={(e) => handleDragStart(e, i)}
+                    onPointerMove={handleDragMove}
+                    onPointerUp={handleDragEnd}
+                    title="Drag to reorder"
+                    style={{
+                      color: theme.textFaint,
+                      fontSize: 12,
+                      lineHeight: 1,
+                      cursor: dragging ? 'grabbing' : 'grab',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      padding: '4px 2px',
+                      flexShrink: 0
+                    }}
+                  >
+                    ≡
+                  </span>
+                )}
+                {chain.length > 1 && (
+                  <button
+                    onClick={() => handleToggleSlot(i)}
+                    title={slot.enabled ? "Bypass this effect" : "Enable this effect"}
+                    style={{
+                      width: 11,
+                      height: 11,
+                      borderRadius: '50%',
+                      border: `1px solid ${theme.panelBorder}`,
+                      background: slot.enabled ? theme.led : '#232323',
+                      boxShadow: slot.enabled ? `0 0 4px ${theme.ledGlow}` : 'inset 0 1px 2px rgba(0,0,0,0.6)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0,
+                      transition: 'background 0.15s ease, box-shadow 0.15s ease'
+                    }}
+                  />
+                )}
                 <div style={{ flex: 1 }}>
                   <EffectSelector
                     selectedEffect={slot.effectId}
@@ -641,17 +743,22 @@ function IndexPopup() {
             )
 
             const knobs = (
-              <EffectControls
-                effectConfig={config}
-                effectParams={slot.params}
-                isCapturing={isCapturing}
-                knobSize={knobSize}
-                midiLearn={midiLearn && isFirst}
-                midiLearnTarget={midiLearnTarget}
-                midiMappings={midiMappings}
-                onArmKnob={handleArmKnob}
-                onParamUpdate={(param, value) => handleParamUpdate(i, param, value)}
-              />
+              <div style={{
+                opacity: slot.enabled ? 1 : 0.45,
+                transition: 'opacity 0.15s ease'
+              }}>
+                <EffectControls
+                  effectConfig={config}
+                  effectParams={slot.params}
+                  isCapturing={isCapturing}
+                  knobSize={knobSize}
+                  midiLearn={midiLearn && isFirst}
+                  midiLearnTarget={midiLearnTarget}
+                  midiMappings={midiMappings}
+                  onArmKnob={handleArmKnob}
+                  onParamUpdate={(param, value) => handleParamUpdate(i, param, value)}
+                />
+              </div>
             )
 
             if (single) {
@@ -685,7 +792,25 @@ function IndexPopup() {
             }
 
             return (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div
+                key={i}
+                ref={(el) => { slotRefs.current[i] = el }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 5,
+                  position: 'relative',
+                  transform: dragging ? `translateY(${dragDy}px)` : 'none',
+                  zIndex: dragging ? 5 : 1,
+                  opacity: dragging ? 0.92 : 1,
+                  boxShadow: dragging ? '0 4px 14px rgba(0,0,0,0.55)' : 'none',
+                  borderRadius: 4,
+                  background: dragging ? theme.panel : 'transparent',
+                  // Green edge marks where the dragged slot will land
+                  borderTop: dropTarget && dragDy < 0 ? `2px solid ${theme.led}` : '2px solid transparent',
+                  borderBottom: dropTarget && dragDy > 0 ? `2px solid ${theme.led}` : '2px solid transparent'
+                }}
+              >
                 {selectorRow}
                 {isFirst && learnTextRow}
                 {knobs}
@@ -693,7 +818,7 @@ function IndexPopup() {
             )
           })}
 
-          {!single && (
+          {!single && (addButton || showFooterHint) && (
             <div style={{
               marginTop: 'auto',
               display: 'flex',
@@ -702,7 +827,7 @@ function IndexPopup() {
               paddingTop: 2
             }}>
               {addButton}
-              {hintRow}
+              {showFooterHint && hintRow}
             </div>
           )}
         </div>
