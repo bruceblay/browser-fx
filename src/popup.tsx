@@ -30,7 +30,7 @@ const newSlotId = () =>
 const MAX_CHAIN = 4
 // Knobs shrink as the chain grows to conserve vertical space
 const KNOB_SIZES = [68, 56, 48, 44]
-const POPUP_HEIGHTS = [246, 330, 430, 515]
+const POPUP_HEIGHTS = [212, 330, 430, 515]
 
 const defaultSlot = (effectId: string): ChainSlot => ({
   id: newSlotId(),
@@ -56,14 +56,15 @@ function IndexPopup() {
   // so the UI doesn't fight the user's hand
   const lastLocalEditRef = useRef(0)
 
-  const single = chain.length === 1
   const knobSize = KNOB_SIZES[chain.length - 1]
   // The footer hint only renders when idle or in learn mode; reclaim its
   // space while capturing so chains end snug against the bottom
   const showFooterHint = midiLearn || !isCapturing
   // The add button floats bottom-right and hides during learn mode
   const canAdd = chain.length < MAX_CHAIN && !midiLearn
-  const popupHeight = POPUP_HEIGHTS[chain.length - 1] - (!single && !showFooterHint && !canAdd ? 22 : 0)
+  const popupHeight = POPUP_HEIGHTS[chain.length - 1]
+    + (midiLearn ? 34 : 0)
+    - (!showFooterHint && !canAdd ? 22 : 0)
 
   // Knob order and ranges for an effect, sent to the offscreen document so
   // MIDI CC values can be scaled onto the right parameters
@@ -764,7 +765,7 @@ function IndexPopup() {
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
-          gap: single ? 0 : 14
+          gap: 14
         }}>
           {chain.map((slot, i) => {
             const config = getEffectConfig(slot.effectId)
@@ -915,37 +916,6 @@ function IndexPopup() {
               </div>
             )
 
-            if (single) {
-              // Single-effect layout matches the pre-chain look: knobs float
-              // centered between the selector and the bottom hint
-              return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  {selectorRow}
-                  <div style={{
-                    flex: midiLearn ? 1.2 : 0.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {learnTextRow}
-                  </div>
-                  {knobs}
-                  <div style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    position: 'relative'
-                  }}>
-                    {hintRow}
-                    {renderAddButton({ right: 0, top: '50%', transform: 'translateY(-50%)' })}
-                  </div>
-                </div>
-              )
-            }
-
             return (
               <div
                 key={i}
@@ -971,7 +941,7 @@ function IndexPopup() {
             )
           })}
 
-          {!single && showFooterHint && (
+          {showFooterHint && (
             <div style={{
               marginTop: 'auto',
               display: 'flex',
@@ -984,7 +954,7 @@ function IndexPopup() {
             </div>
           )}
 
-          {!single && renderAddButton({ right: 0, bottom: 0 })}
+          {renderAddButton({ right: 0, bottom: 0 })}
         </div>
       </div>
     </div>
