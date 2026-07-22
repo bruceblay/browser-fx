@@ -1,15 +1,19 @@
-Browser FX transforms your web audio experience with real-time professional audio effects. Capture any tab's audio and shape it with studio-style knobs in a sleek dark interface, complete with an audio-reactive cymatic visualizer, and even hands-on control from your MIDI controller.
+Browser FX transforms your web audio experience with real-time professional audio effects. Capture any tab's audio, chain up to 4 effects, and shape the sound with studio-style knobs, an audio-reactive cymatic visualizer, and hands-on control from your MIDI controller.
 
 22 HIGH-QUALITY EFFECTS:
 Bitcrusher • CD Skipper • Reverb • Hall Reverb • Filter • Auto Filter • Comb Filter • Delay • Tap Delay • Distortion • Chorus • Phaser • Flanger • Tremolo • Vibrato • Auto Panner • Pitch Shifter • Ring Mod • Compressor • DJ EQ • Tape Stop • Lo-Fi Tape
 
+EFFECT CHAINS:
+Stack up to 4 effects and run them in series: bitcrush into reverb, filter into delay into tape. Drag to reorder the chain, switch each effect on and off without a click or pop, and even double up the same effect for extreme sounds.
+
 MIDI CONTROL:
-Map any MIDI controller to the knobs with one-click MIDI learn. Twist real hardware to shape your sound, and your controller keeps working even with the popup closed. One 4-knob controller drives every effect.
+Map any MIDI controller with one-click MIDI learn: knobs control parameters, pads and buttons punch effects in and out. Mappings stick to each effect (even when you reorder the chain), and your controller keeps working with the popup closed.
 
 KEY FEATURES:
 • Real-time audio processing on any website
-• Per-tab effects, run different effects on different tabs
-• Hardware MIDI control with built-in MIDI learn
+• Chain up to 4 effects with drag-to-reorder and per-effect bypass
+• Per-tab effects, run different chains on different tabs
+• Hardware MIDI control: knobs for parameters, pads for effect on/off
 • Studio-inspired interface with responsive knobs and per-effect color themes
 • Audio-reactive cymatic visualizer, a Chladni plate pattern driven by your sound
 • Live parameter adjustment while audio plays
@@ -22,7 +26,7 @@ Music streaming • Video content • Content creation • Audio experimentation
 
 SIMPLE TO USE:
 1. Click the Browser FX icon
-2. Choose an effect
+2. Choose an effect, or stack up to 4
 3. Press the power button
 4. Twist the knobs in real time, on screen or from your MIDI controller
 5. Enjoy
