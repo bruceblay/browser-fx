@@ -5,7 +5,13 @@ import { EffectSelector } from "./components/EffectSelector"
 import { EffectControls } from "./components/EffectControls"
 import { Visualizer } from "./components/Visualizer"
 import { AboutView } from "./components/AboutView"
+import { PresetMenu } from "./components/PresetMenu"
 import { getEffectConfig, getEffectDefaults } from "./effects"
+import {
+  FACTORY_PRESETS, deriveName, isFactoryPreset, loadUserPresets,
+  newPresetId, normalizePresetSlots, saveUserPresets, uniqueName,
+  type Preset, type PresetMidiBinding
+} from "./presets"
 import { theme } from "./theme"
 
 type ChainSlot = {
@@ -39,6 +45,11 @@ const defaultSlot = (effectId: string): ChainSlot => ({
   enabled: true
 })
 
+// The sound of a chain, ignoring instance identity. Comparing this against the
+// snapshot taken at load time is what drives the modified marker.
+const slotsSignature = (c: Array<{ effectId: string; params: Record<string, number>; enabled: boolean }>) =>
+  JSON.stringify(c.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled })))
+
 function IndexPopup() {
   const [isCapturing, setIsCapturing] = useState(false)
   const [chain, setChain] = useState<ChainSlot[]>([defaultSlot("bitcrusher")])
@@ -50,6 +61,11 @@ function IndexPopup() {
   const [midiLearnTarget, setMidiLearnTarget] = useState<{ slot: number; knob: number | 'toggle' } | null>(null)
   const [midiMappings, setMidiMappings] = useState<Record<string, MidiBinding>>({})
   const [midiStatus, setMidiStatus] = useState('')
+  const [showPresets, setShowPresets] = useState(false)
+  const [userPresets, setUserPresets] = useState<Preset[]>([])
+  const [activePresetId, setActivePresetId] = useState<string | null>(null)
+  // Signature of the chain as it was when the preset loaded
+  const [presetSnapshot, setPresetSnapshot] = useState<string | null>(null)
   const midiLearnTargetRef = useRef<{ slot: number; knob: number | 'toggle' } | null>(null)
   const midiAccessRef = useRef<MIDIAccess | null>(null)
   // Suppresses knob updates from offscreen frames right after a local drag,
@@ -65,6 +81,11 @@ function IndexPopup() {
   const popupHeight = POPUP_HEIGHTS[chain.length - 1]
     + (midiLearn ? 34 : 0)
     - (!showFooterHint && !canAdd ? 22 : 0)
+
+  const activePreset = activePresetId
+    ? [...FACTORY_PRESETS, ...userPresets].find(p => p.id === activePresetId) || null
+    : null
+  const presetDirty = !!presetSnapshot && slotsSignature(chain) !== presetSnapshot
 
   // Knob order and ranges for an effect, sent to the offscreen document so
   // MIDI CC values can be scaled onto the right parameters
@@ -135,6 +156,15 @@ function IndexPopup() {
               }])
             }
 
+            // Which preset the chain came from, so reopening the popup still
+            // shows the name and the modified marker
+            if (typeof savedState.activePresetId === 'string') {
+              setActivePresetId(savedState.activePresetId)
+              setPresetSnapshot(
+                typeof savedState.presetSnapshot === 'string' ? savedState.presetSnapshot : null
+              )
+            }
+
             setIsCapturing(savedState.isCapturing || false)
 
             // Saved state can claim "capturing" after an extension reload
@@ -165,7 +195,9 @@ function IndexPopup() {
       if (currentTabId) {
         try {
           const storageKey = `tabState_${currentTabId}`
-          await chrome.storage.local.set({ [storageKey]: { chain, isCapturing } })
+          await chrome.storage.local.set({
+            [storageKey]: { chain, isCapturing, activePresetId, presetSnapshot }
+          })
         } catch (error) {
           console.error("Failed to save state:", error)
         }
@@ -173,7 +205,7 @@ function IndexPopup() {
     }
 
     saveState()
-  }, [currentTabId, chain, isCapturing])
+  }, [currentTabId, chain, isCapturing, activePresetId, presetSnapshot])
 
   // Remove body margin and set background behind the device panel
   useEffect(() => {
@@ -392,7 +424,127 @@ function IndexPopup() {
     })
   }
 
+  // ---- Presets ----
+
+  useEffect(() => {
+    loadUserPresets(MAX_CHAIN).then(setUserPresets)
+  }, [])
+
+  const persistPresets = (next: Preset[]) => {
+    setUserPresets(next)
+    saveUserPresets(next)
+  }
+
+  // Live mappings point at slot instances. Convert them to the positional form
+  // a preset stores, dropping any that reference a slot no longer in the chain.
+  const currentMidiForChain = (): PresetMidiBinding[] => {
+    const out: PresetMidiBinding[] = []
+    for (const [key, b] of Object.entries(midiMappings)) {
+      const slotIndex = chain.findIndex(s => s.id === b.slotId)
+      if (slotIndex === -1) continue
+      out.push({ key, slotIndex, kind: b.kind, knobIndex: b.knobIndex })
+    }
+    return out
+  }
+
+  // Rebind positional bindings onto freshly minted slot instances. A knob
+  // binding is dropped if the effect now in that slot has fewer knobs.
+  const applyPresetMidi = (bindings: PresetMidiBinding[], newChain: ChainSlot[]) => {
+    const next: Record<string, MidiBinding> = {}
+    for (const b of bindings) {
+      const slot = newChain[b.slotIndex]
+      if (!slot) continue
+      if (b.kind === 'knob') {
+        const params = getEffectConfig(slot.effectId)?.parameters
+        if (!params || b.knobIndex === undefined || b.knobIndex >= params.length) continue
+        next[b.key] = { slotId: slot.id, kind: 'knob', knobIndex: b.knobIndex }
+      } else {
+        next[b.key] = { slotId: slot.id, kind: 'toggle' }
+      }
+    }
+    setMidiMappings(next)
+    chrome.storage.local.set({ midiMappings: next })
+  }
+
+  const handleLoadPreset = (preset: Preset) => {
+    const slots = normalizePresetSlots(preset.slots, MAX_CHAIN)
+    if (!slots.length) return
+
+    // Read the current bindings before the chain is replaced: factory presets
+    // ship without MIDI, and someone auditioning them with a controller in
+    // hand shouldn't lose their knob assignments on every click.
+    const carried = currentMidiForChain()
+
+    const newChain: ChainSlot[] = slots.map(s => ({
+      id: newSlotId(),
+      effectId: s.effectId,
+      params: s.params,
+      enabled: s.enabled
+    }))
+
+    setChain(newChain)
+    if (isCapturing) sendChain(newChain)
+    applyPresetMidi(preset.midi.length ? preset.midi : carried, newChain)
+
+    setActivePresetId(preset.id)
+    setPresetSnapshot(slotsSignature(newChain))
+    setShowPresets(false)
+  }
+
+  // Back to the state the popup opens in: one bitcrusher at defaults, no
+  // preset attributed. MIDI bindings carry over by position the same way they
+  // do when loading a factory preset, since clearing them has its own control.
+  const handleResetChain = () => {
+    const carried = currentMidiForChain()
+    const newChain = [defaultSlot('bitcrusher')]
+    setChain(newChain)
+    if (isCapturing) sendChain(newChain)
+    applyPresetMidi(carried, newChain)
+    setActivePresetId(null)
+    setPresetSnapshot(null)
+    setShowPresets(false)
+  }
+
+  const handleSavePreset = (name: string) => {
+    const preset: Preset = {
+      id: newPresetId(),
+      name: uniqueName(name, userPresets.map(p => p.name)),
+      slots: chain.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled })),
+      midi: currentMidiForChain()
+    }
+    persistPresets([...userPresets, preset])
+    setActivePresetId(preset.id)
+    setPresetSnapshot(slotsSignature(chain))
+  }
+
+  // Only reachable for a modified user preset, so save can never clobber
+  const handleUpdatePreset = () => {
+    if (!activePresetId || isFactoryPreset(activePresetId)) return
+    const slots = chain.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled }))
+    const midi = currentMidiForChain()
+    persistPresets(userPresets.map(p =>
+      p.id === activePresetId ? { ...p, slots, midi } : p
+    ))
+    setPresetSnapshot(slotsSignature(chain))
+  }
+
+  const handleRenamePreset = (id: string, name: string) => {
+    persistPresets(userPresets.map(p =>
+      p.id === id ? { ...p, name: uniqueName(name, userPresets.filter(o => o.id !== id).map(o => o.name)) } : p
+    ))
+  }
+
+  const handleDeletePreset = (id: string) => {
+    persistPresets(userPresets.filter(p => p.id !== id))
+    // The chain stays as it is; it just stops being attributed to a preset
+    if (activePresetId === id) {
+      setActivePresetId(null)
+      setPresetSnapshot(null)
+    }
+  }
+
   const handleMidiClick = async () => {
+    setShowPresets(false)
     if (midiLearn) {
       setMidiLearn(false)
       setMidiLearnTarget(null)
@@ -732,16 +884,39 @@ function IndexPopup() {
       flexDirection: 'column',
       background: theme.panel,
       fontFamily: theme.font,
-      color: theme.text
+      color: theme.text,
+      position: 'relative'
     }}>
       <Header
         onInfoClick={() => setShowAbout(true)}
         onClearClick={handleClearStreams}
         onMidiClick={handleMidiClick}
+        onPresetsClick={() => setShowPresets(v => !v)}
+        presetsOpen={showPresets}
+        presetName={activePreset?.name || null}
+        presetDirty={presetDirty}
         midiLearnActive={midiLearn}
         isCapturing={isCapturing}
         onPowerToggle={isCapturing ? handleStopCapture : handleStartCapture}
       />
+
+      {showPresets && (
+        <PresetMenu
+          userPresets={userPresets}
+          factoryPresets={FACTORY_PRESETS}
+          activeId={activePresetId}
+          dirty={presetDirty}
+          suggestedName={uniqueName(deriveName(chain), userPresets.map(p => p.name))}
+          maxHeight={popupHeight - 38}
+          onLoad={handleLoadPreset}
+          onSaveNew={handleSavePreset}
+          onUpdate={handleUpdatePreset}
+          onReset={handleResetChain}
+          onRename={handleRenamePreset}
+          onDelete={handleDeletePreset}
+          onClose={() => setShowPresets(false)}
+        />
+      )}
 
       <div style={{
         flex: 1,

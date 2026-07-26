@@ -103,6 +103,33 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
             textTransform: 'lowercase',
             letterSpacing: '0.5px'
           }}>
+            presets
+          </h4>
+          <p style={{ margin: '0 0 8px 0' }}>
+            Open the disk icon in the title bar for seven presets to start from:{' '}
+            <strong style={{ color: theme.text }}>Lo-Fi Radio</strong>,{' '}
+            <strong style={{ color: theme.text }}>Chopped &amp; Screwed</strong>,{' '}
+            <strong style={{ color: theme.text }}>Wobbler</strong>,{' '}
+            <strong style={{ color: theme.text }}>Warped Record</strong>,{' '}
+            <strong style={{ color: theme.text }}>Jet Stream</strong>,{' '}
+            <strong style={{ color: theme.text }}>Dub Echo</strong> and{' '}
+            <strong style={{ color: theme.text }}>Cyborg</strong>.
+          </p>
+          <p style={{ margin: '0 0 12px 0' }}>
+            Load one and turn some knobs, then save the result as your own preset.
+            Your presets store their MIDI mappings too, so loading one brings back
+            your controller layout along with the sound. Use{' '}
+            <em>start from scratch</em> to get back to a single bitcrusher.
+          </p>
+
+          <h4 style={{
+            color: theme.text,
+            margin: '0 0 8px 0',
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: 'lowercase',
+            letterSpacing: '0.5px'
+          }}>
             available effects
           </h4>
           <ul style={{ paddingLeft: 18, margin: '0 0 12px 0' }}>
@@ -141,7 +168,7 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
             how to use
           </h4>
           <ol style={{ paddingLeft: 18, margin: 0 }}>
-            <li style={{ marginBottom: 6 }}>Choose an audio effect from the dropdown</li>
+            <li style={{ marginBottom: 6 }}>Load a preset, or choose an effect from the dropdown and stack up to 4</li>
             <li style={{ marginBottom: 6 }}>Click the power button in the title bar to begin processing</li>
             <li style={{ marginBottom: 6 }}>Adjust parameters in real-time with the knobs</li>
             <li style={{ marginBottom: 6 }}>Click the power button again to stop, or ↺ to clear all audio streams</li>

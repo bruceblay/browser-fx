@@ -260,17 +260,45 @@ function createDistortion(context, params, tabLiveParams) {
   const outputGain = context.createGain()
 
   // Continuous drive curve: normalized tanh morphs smoothly from gentle
-  // warmth to near-hard clipping with no jumps while dragging the knob,
-  // and the normalization keeps output level consistent across the range
+  // warmth to near-hard clipping with no jumps while dragging the knob.
+  //
+  // Dividing by tanh(drive) only pins the curve's endpoints to +/-1. It does
+  // nothing for output LEVEL, because at high drive almost any input maps to
+  // full scale: measured, this ran +12.6dB hot with peaks at 1.26, i.e. past
+  // full scale. So the curve is additionally trimmed by its own measured RMS
+  // response to a reference tone, which holds the level steady across the
+  // whole drive range and stops it clipping.
+  const REF_AMP = 0.28 // tuned by measurement to land near unity on pink noise
+
+  // Perceptual drive taper. A linear ramp to 51 reached hard clipping a quarter
+  // of the way up, so the top three quarters of the knob all sounded the same:
+  // measured, a normal-level signal was already at 0.993 of full scale at
+  // amount 0.25 and pinned at 1.000 from 0.4 up. Doubling the drive per equal
+  // step spreads gentle through destroyed across the whole sweep instead.
+  const MAX_DRIVE = 24
+
   function updateDistortionCurve() {
     const samples = 8192
     const curve = new Float32Array(samples)
-    const drive = 1 + liveParams.amount * 50  // 1 to 51 drive
+    const drive = Math.pow(MAX_DRIVE, liveParams.amount) // 1 at 0, 24 at full
     const norm = Math.tanh(drive)
+
+    // Measure what this curve does to a reference sine, then scale so RMS in
+    // equals RMS out
+    const probes = 2048
+    let sumIn = 0
+    let sumOut = 0
+    for (let i = 0; i < probes; i++) {
+      const x = REF_AMP * Math.sin((2 * Math.PI * i) / probes)
+      const y = Math.tanh(x * drive) / norm
+      sumIn += x * x
+      sumOut += y * y
+    }
+    const trim = sumOut > 0 ? Math.sqrt(sumIn / sumOut) : 1
 
     for (let i = 0; i < samples; i++) {
       const x = (i * 2) / samples - 1
-      curve[i] = Math.tanh(x * drive) / norm
+      curve[i] = (Math.tanh(x * drive) / norm) * trim
     }
     waveshaper.curve = curve
   }
@@ -743,6 +771,15 @@ function createAutoFilter(context, params, tabLiveParams) {
 }
 
 // Pitch Shifter Effect Implementation
+//
+// Two delay lines whose delay times ramp linearly in the SAME direction, half a
+// period apart, amplitude-crossfaded by raised cosines that hit zero exactly
+// where each ramp resets. A linear delay ramp is what produces a steady pitch
+// ratio; the crossfade is what hides the reset discontinuity.
+//
+// The earlier version swept a triangle LFO, so the down-ramp emitted a second,
+// equally loud shift at ratio (2 - r): asking for -8st also produced +5.4st,
+// and asking for +7st also produced -12st. Both were measured off a 440Hz tone.
 function createPitchShifter(context, params, tabLiveParams) {
   console.log('🎵 PITCHSHIFTER: Creating pitch shifter effect')
 
@@ -751,77 +788,130 @@ function createPitchShifter(context, params, tabLiveParams) {
   tabLiveParams.windowSize = params.windowSize !== undefined ? params.windowSize : 0.05
   tabLiveParams.wet = params.wet !== undefined ? params.wet : 1.0
 
-  // Create a simple pitch shifter using delay and pitch modulation
-  const delay1 = context.createDelay(0.5)
-  const delay2 = context.createDelay(0.5)
-  const lfo = context.createOscillator()
-  const lfoGain = context.createGain()
-  const wetGain = context.createGain()
-  const dryGain = context.createGain()
   const inputGain = context.createGain()
   const outputGain = context.createGain()
-  const mixer = context.createGain()
+  const wetGain = context.createGain()
+  const dryGain = context.createGain()
+  const delay1 = context.createDelay(0.5)
+  const delay2 = context.createDelay(0.5)
+  const fade1 = context.createGain()
+  const fade2 = context.createGain()
+  const ramp1 = context.createOscillator()
+  const ramp2 = context.createOscillator()
+  const rampDepth1 = context.createGain()
+  const rampDepth2 = context.createGain()
+  const windowOsc = context.createOscillator()
+  const windowDown = context.createGain()
+  const windowUp = context.createGain()
 
-  // Convert semitones to frequency ratio (inverted to fix reversed pitch)
-  const pitchRatio = Math.pow(2, -tabLiveParams.pitch / 12)
+  // Truncating the series puts ripple on the ramp, which shows up as sidebands
+  // at carrier +/- (HARMONICS * rate). A high count pushes those out of the way
+  // and packs the remaining ripple against the reset, where the crossfade is
+  // already silent. createPeriodicWave band-limits for us near Nyquist.
+  const HARMONICS = 512
 
-  // Set up delays for pitch shifting
+  // A sawtooth built as an explicit harmonic series, so the half-period-shifted
+  // twin is the same coefficients with the odd harmonics negated. Deriving it
+  // this way keeps the two ramps locked regardless of sign conventions.
+  const sawWave = (shifted) => {
+    const real = new Float32Array(HARMONICS)
+    const imag = new Float32Array(HARMONICS)
+    for (let n = 1; n < HARMONICS; n++) {
+      imag[n] = ((2 / Math.PI) / n) * (shifted && n % 2 === 1 ? -1 : 1)
+    }
+    return context.createPeriodicWave(real, imag, { disableNormalization: true })
+  }
+
+  // A true cosine: 1 at phase 0, where ramp1 resets and fade1 must be silent
+  const cosReal = new Float32Array(2)
+  cosReal[1] = 1
+  const cosWave = context.createPeriodicWave(cosReal, new Float32Array(2), {
+    disableNormalization: true
+  })
+
+  ramp1.setPeriodicWave(sawWave(false))
+  ramp2.setPeriodicWave(sawWave(true))
+  windowOsc.setPeriodicWave(cosWave)
+
+  // Grain rate. One crossfade period spans two window-size settings, matching
+  // how the knob used to behave.
+  const rateFor = (w) => 1 / (w * 2)
+  // The ramp sweeps +/- this much around the base delay. Over one period that
+  // is a delay slope of (r - 1), which lands the output ratio on r. The sign
+  // follows the PeriodicWave convention and was settled by measurement, not
+  // derivation: the opposite sign yields ratio (2 - r).
+  const sweepFor = (pitch, w) => (Math.pow(2, pitch / 12) - 1) * w
+
   const baseDelay = tabLiveParams.windowSize
   delay1.delayTime.value = baseDelay
   delay2.delayTime.value = baseDelay
+  ramp1.frequency.value = rateFor(tabLiveParams.windowSize)
+  ramp2.frequency.value = rateFor(tabLiveParams.windowSize)
+  windowOsc.frequency.value = rateFor(tabLiveParams.windowSize)
+  rampDepth1.gain.value = sweepFor(tabLiveParams.pitch, tabLiveParams.windowSize)
+  rampDepth2.gain.value = rampDepth1.gain.value
 
-  // Set up LFO for pitch modulation
-  lfo.frequency.value = 1 / (tabLiveParams.windowSize * 2) // Modulation rate based on window
-  lfo.type = 'triangle'
+  // fade1 = 0.5 - 0.5cos (silent at phase 0, where ramp1 resets), fade2 =
+  // 0.5 + 0.5cos (silent at half period, where ramp2 resets). They sum to 1
+  // everywhere, so the handover is gain-neutral.
+  //
+  // A constant-power (|sin|/|cos|) crossfade was tried here and measured
+  // identically, so the simpler pair stays: the residual artifact is grain-to-
+  // grain phase cancellation, not a crossfade shape problem.
+  fade1.gain.value = 0.5
+  fade2.gain.value = 0.5
+  windowDown.gain.value = -0.5
+  windowUp.gain.value = 0.5
 
-  // Modulate delay times to create pitch shifting effect
-  lfoGain.gain.value = baseDelay * (1 - 1/pitchRatio) * 0.5
-
-  // Set up wet/dry mix
   wetGain.gain.value = tabLiveParams.wet
   dryGain.gain.value = 1 - tabLiveParams.wet
 
-  // Connect pitch shifter chain
-  lfo.connect(lfoGain)
-  lfoGain.connect(delay1.delayTime)
-  // Inverted modulation for second delay
-  const inverter = context.createGain()
-  inverter.gain.value = -1
-  lfoGain.connect(inverter)
-  inverter.connect(delay2.delayTime)
+  ramp1.connect(rampDepth1)
+  rampDepth1.connect(delay1.delayTime)
+  ramp2.connect(rampDepth2)
+  rampDepth2.connect(delay2.delayTime)
+
+  windowOsc.connect(windowDown)
+  windowDown.connect(fade1.gain)
+  windowOsc.connect(windowUp)
+  windowUp.connect(fade2.gain)
 
   inputGain.connect(delay1)
   inputGain.connect(delay2)
   inputGain.connect(dryGain)
 
-  delay1.connect(mixer)
-  delay2.connect(mixer)
-  mixer.gain.value = 0.5 // Mix the two delayed signals
-  mixer.connect(wetGain)
+  delay1.connect(fade1)
+  delay2.connect(fade2)
+  fade1.connect(wetGain)
+  fade2.connect(wetGain)
 
   wetGain.connect(outputGain)
   dryGain.connect(outputGain)
 
-  // Start LFO
-  lfo.start()
+  // All three must start together and always share identical frequency
+  // automation, otherwise the ramps drift out of phase with the crossfade
+  const startAt = context.currentTime
+  ramp1.start(startAt)
+  ramp2.start(startAt)
+  windowOsc.start(startAt)
 
-  // Store references
-  inputGain._delay1 = delay1
-  inputGain._delay2 = delay2
-  inputGain._lfo = lfo
-  inputGain._lfoGain = lfoGain
   inputGain._wetGain = wetGain
   inputGain._dryGain = dryGain
 
   // Live update for pitch/window changes, so knob drags don't rebuild the effect
-  inputGain._applyPitchSettings = function() {
-    const ratio = Math.pow(2, -tabLiveParams.pitch / 12)
-    const windowDelay = tabLiveParams.windowSize
-    smoothParamChange(delay1.delayTime, windowDelay, 0.03, 'linear')
-    smoothParamChange(delay2.delayTime, windowDelay, 0.03, 'linear')
-    smoothParamChange(lfo.frequency, 1 / (windowDelay * 2), 0.03, 'linear')
-    // Modulation amount can be negative for upward shifts, so ramp linearly
-    smoothParamChange(lfoGain.gain, windowDelay * (1 - 1 / ratio) * 0.5, 0.03, 'linear')
+  inputGain._applyPitchSettings = function () {
+    const w = tabLiveParams.windowSize
+    const rate = rateFor(w)
+    const sweep = sweepFor(tabLiveParams.pitch, w)
+    smoothParamChange(delay1.delayTime, w, 0.03, 'linear')
+    smoothParamChange(delay2.delayTime, w, 0.03, 'linear')
+    // Identical ramps for all three keeps their relative phase fixed
+    smoothParamChange(ramp1.frequency, rate, 0.03, 'linear')
+    smoothParamChange(ramp2.frequency, rate, 0.03, 'linear')
+    smoothParamChange(windowOsc.frequency, rate, 0.03, 'linear')
+    // Sweep goes negative for upward shifts, so it has to ramp linearly
+    smoothParamChange(rampDepth1.gain, sweep, 0.03, 'linear')
+    smoothParamChange(rampDepth2.gain, sweep, 0.03, 'linear')
   }
 
   return { input: inputGain, output: outputGain }
@@ -1002,8 +1092,10 @@ function createTapTempoDelay(context, params, tabLiveParams) {
   feedbackGain.gain.value = tabLiveParams.feedback
 
   // Set up wet/dry mix
-  wetGain.gain.value = tabLiveParams.wet
-  dryGain.gain.value = 1 - tabLiveParams.wet
+  // Equal-power mix: the repeats are decorrelated from dry, so a linear
+  // wet + (1 - wet) sum dips in the middle (measured -1.5dB at the default 0.5)
+  wetGain.gain.value = Math.sqrt(tabLiveParams.wet)
+  dryGain.gain.value = Math.sqrt(1 - tabLiveParams.wet)
 
   // Connect tap tempo delay chain
   inputGain.connect(delay)
@@ -1076,8 +1168,13 @@ function createLoopChop(context, params, tabLiveParams) {
   let maxStutters = Math.floor(tabLiveParams.stutterRate)
 
   // Set up wet/dry mix
-  wetGain.gain.value = tabLiveParams.wet
-  dryGain.gain.value = 1 - tabLiveParams.wet
+  // Equal-power mix. The stuttered signal is a repeated older chunk, so it is
+  // decorrelated from dry and a linear wet + (1 - wet) sum loses level in the
+  // middle: measured -1.6dB at the default 0.8 and -2.5dB at 0.6, while wet 1.0
+  // was already unity. Squaring to 1 instead holds the level across the knob
+  // and still leaves both endpoints exact.
+  wetGain.gain.value = Math.sqrt(tabLiveParams.wet)
+  dryGain.gain.value = Math.sqrt(1 - tabLiveParams.wet)
 
   // Audio processing function
   scriptProcessor.onaudioprocess = function(audioProcessingEvent) {
@@ -1462,10 +1559,18 @@ function createRingModulator(context, params, tabLiveParams) {
     }
   }
 
+  // Ring modulation scatters the signal into sidebands and drops the carrier,
+  // so it lands about 5.4dB under dry (measured against pink noise at the
+  // shipped defaults). Makeup gets its own node because the wet/dry ramps
+  // overwrite wetGain.gain on every knob move.
+  const makeup = context.createGain()
+  makeup.gain.value = 1.85 // +5.3dB
+
   // Connect the processing chain
   inputGain.connect(scriptProcessor)
   inputGain.connect(dryGain)
-  scriptProcessor.connect(wetGain)
+  scriptProcessor.connect(makeup)
+  makeup.connect(wetGain)
 
   wetGain.connect(outputGain)
   dryGain.connect(outputGain)
@@ -2278,10 +2383,11 @@ function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
       break
 
     case 'taptempodelay':
-      // Update wet/dry mix and feedback in real-time with smooth transitions
+      // Update wet/dry mix and feedback in real-time with smooth transitions.
+      // Equal-power, matching the constructor.
       if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
-        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
-        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._wetGain.gain, Math.sqrt(slot.liveParams.wet), 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, Math.sqrt(1 - slot.liveParams.wet), 0.015)
       }
       if (params.feedback !== undefined && slot.effect.input._feedbackGain) {
         smoothParamChange(slot.effect.input._feedbackGain.gain, slot.liveParams.feedback, 0.015)
@@ -2294,9 +2400,10 @@ function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
 
     case 'loopchop':
       // Update wet/dry mix in real-time with smooth transitions
+      // Equal-power, matching the constructor
       if (params.wet !== undefined && slot.effect.input._wetGain && slot.effect.input._dryGain) {
-        smoothParamChange(slot.effect.input._wetGain.gain, slot.liveParams.wet, 0.015)
-        smoothParamChange(slot.effect.input._dryGain.gain, 1 - slot.liveParams.wet, 0.015)
+        smoothParamChange(slot.effect.input._wetGain.gain, Math.sqrt(slot.liveParams.wet), 0.015)
+        smoothParamChange(slot.effect.input._dryGain.gain, Math.sqrt(1 - slot.liveParams.wet), 0.015)
       }
       // Note: loopSize, stutterRate, and tempo changes require effect
       // recreation to resize the capture buffer

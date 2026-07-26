@@ -6,12 +6,16 @@ Bitcrusher • CD Skipper • Reverb • Hall Reverb • Filter • Auto Filter 
 EFFECT CHAINS:
 Stack up to 4 effects and run them in series: bitcrush into reverb, filter into delay into tape. Drag to reorder the chain, switch each effect on and off without a click or pop, and even double up the same effect for extreme sounds.
 
+PRESETS:
+Seven presets to start from: Lo-Fi Radio, Chopped & Screwed, Wobbler, Warped Record, Jet Stream, Dub Echo and Cyborg. Load one and turn some knobs, then save the result as your own. Your presets store their MIDI mappings too, so loading one brings back your controller layout along with the sound.
+
 MIDI CONTROL:
 Map any MIDI controller with one-click MIDI learn: knobs control parameters, pads and buttons punch effects in and out. Mappings stick to each effect (even when you reorder the chain), and your controller keeps working with the popup closed.
 
 KEY FEATURES:
 • Real-time audio processing on any website
 • Chain up to 4 effects with drag-to-reorder and per-effect bypass
+• Seven built-in presets, plus your own saved with their MIDI mappings
 • Per-tab effects, run different chains on different tabs
 • Hardware MIDI control: knobs for parameters, pads for effect on/off
 • Studio-inspired interface with responsive knobs and per-effect color themes
@@ -25,7 +29,7 @@ Music streaming • Video content • Content creation • Audio experimentation
 
 SIMPLE TO USE:
 1. Click the Browser FX icon
-2. Choose an effect, or stack up to 4
+2. Load a preset, or choose an effect and stack up to 4
 3. Press the power button
 4. Twist the knobs in real time, on screen or from your MIDI controller
 5. Enjoy

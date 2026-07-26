@@ -4,6 +4,10 @@ interface HeaderProps {
   onInfoClick: () => void
   onClearClick: () => void
   onMidiClick: () => void
+  onPresetsClick: () => void
+  presetsOpen: boolean
+  presetName: string | null
+  presetDirty: boolean
   midiLearnActive: boolean
   isCapturing: boolean
   onPowerToggle: () => void
@@ -37,7 +41,18 @@ const dim = (e: React.MouseEvent<HTMLButtonElement>) => {
   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'
 }
 
-export function Header({ onInfoClick, onClearClick, onMidiClick, midiLearnActive, isCapturing, onPowerToggle }: HeaderProps) {
+// Floppy disk, drawn rather than typed so it stays monochrome with the other
+// glyphs in this row. Inherits the button's color for the hover transition.
+const DiskIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 16 16" fill="none"
+    stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+    <path d="M2.6 2.6h8.3l2.5 2.5v8.3H2.6z" />
+    <path d="M5.6 2.6v3.3h4.4V2.6" />
+    <path d="M5.2 13.4V9.6h5.6v3.8" />
+  </svg>
+)
+
+export function Header({ onInfoClick, onClearClick, onMidiClick, onPresetsClick, presetsOpen, presetName, presetDirty, midiLearnActive, isCapturing, onPowerToggle }: HeaderProps) {
   return (
     <div style={{
       display: 'flex',
@@ -67,16 +82,53 @@ export function Header({ onInfoClick, onClearClick, onMidiClick, midiLearnActive
         }}
       />
 
-      <span style={{
-        fontSize: 13,
-        fontWeight: 700,
-        color: theme.textBright,
-        letterSpacing: '0.2px',
+      <div style={{
         flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 6,
         userSelect: 'none'
       }}>
-        Browser FX
-      </span>
+        <span style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: theme.textBright,
+          letterSpacing: '0.2px',
+          flexShrink: 0
+        }}>
+          Browser FX
+        </span>
+        {/* The loaded preset, with the usual asterisk once it's been touched */}
+        {presetName && (
+          <span style={{
+            fontSize: 10,
+            color: theme.textFaint,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {presetName}{presetDirty ? ' *' : ''}
+          </span>
+        )}
+      </div>
+
+      <button
+        onClick={onPresetsClick}
+        title="Presets"
+        style={{
+          ...iconButtonStyle,
+          ...(presetsOpen ? {
+            color: theme.textBright,
+            borderColor: 'rgba(255,255,255,0.5)'
+          } : {})
+        }}
+        onMouseOver={(e) => { if (!presetsOpen) brighten(e) }}
+        onMouseOut={(e) => { if (!presetsOpen) dim(e) }}
+      >
+        <DiskIcon />
+      </button>
 
       <button
         onClick={onMidiClick}

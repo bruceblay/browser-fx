@@ -42,7 +42,11 @@ const formatValue = (v: number, param: ParameterConfig): string => {
     case '%': return param.max > 1 ? `${Math.round(v)}%` : `${Math.round(v * 100)}%`
     case 's': return v < 1 ? `${Math.round(v * 1000)}ms` : `${parseFloat(v.toFixed(1))}s`
     case 'ms': return `${Math.round(v)}ms`
-    case 'Hz': return v >= 1000 ? `${parseFloat((v / 1000).toFixed(1))}kHz` : `${Math.round(v)}Hz`
+    // Sub-10Hz values are LFO rates, where rounding to a whole number turns
+    // every slow sweep into a meaningless "0Hz"
+    case 'Hz':
+      if (v >= 1000) return `${parseFloat((v / 1000).toFixed(1))}kHz`
+      return v < 10 ? `${parseFloat(v.toFixed(1))}Hz` : `${Math.round(v)}Hz`
     case 'dB': return `${parseFloat(v.toFixed(1))}dB`
     case 'semitones': return `${v > 0 ? '+' : ''}${Math.round(v)}st`
     case 'bpm': return `${Math.round(v)}`
