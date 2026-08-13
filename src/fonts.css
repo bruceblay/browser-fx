@@ -1,5 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Chrome sizes the popup window at first layout, so the default body margin
+   must be gone before then. Removing it later (in a React effect) leaves the
+   window wide and a blank gutter on the right. */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
 /* Default blue selection reads as a foreign element on the dark device panel */
 ::selection {
   background: rgba(68, 217, 98, 0.3);

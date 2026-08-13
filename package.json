@@ -1,7 +1,7 @@
 {
   "name": "browser-fx",
   "displayName": "Browser FX: Tab Audio Effects + MIDI",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Real-time audio effects for any tab: reverb, filter, EQ, bitcrusher, delay + 17 more. Chain 4 effects, presets, MIDI control.",
   "author": "Bruce Blay <bruceblay@gmail.com>",
   "contributors": [
