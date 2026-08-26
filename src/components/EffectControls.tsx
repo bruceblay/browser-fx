@@ -51,6 +51,14 @@ const formatValue = (v: number, param: ParameterConfig): string => {
     case 'semitones': return `${v > 0 ? '+' : ''}${Math.round(v)}st`
     case 'bpm': return `${Math.round(v)}`
     case ':1': return `${Math.round(v)}:1`
+    // Utility's stereo width reads as a percentage of the original image,
+    // so 0% is mono, 100% untouched, 200% double-wide
+    case 'width': return `${Math.round(v * 100)}%`
+    // Pan reads the way a mixer labels it rather than as a signed fraction
+    case 'pan':
+      if (Math.abs(v) < 0.01) return 'C'
+      return v < 0 ? `L${Math.round(-v * 100)}` : `R${Math.round(v * 100)}`
+    case 'onoff': return v >= 0.5 ? 'On' : 'Off'
     default: return param.step >= 1 ? `${Math.round(v)}` : v.toFixed(2)
   }
 }

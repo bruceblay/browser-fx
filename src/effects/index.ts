@@ -21,6 +21,7 @@ import { simpleFilterConfig } from './simplefilter'
 import { tapTempoDelayConfig } from './taptempodelay'
 import { tapeStopConfig } from './tapestop'
 import { lofiTapeConfig } from './lofitape'
+import { utilityConfig } from './utility'
 
 // Registry of all available effects
 export const EFFECTS: Record<string, EffectConfig> = {
@@ -46,6 +47,7 @@ export const EFFECTS: Record<string, EffectConfig> = {
   [tapTempoDelayConfig.id]: tapTempoDelayConfig,
   [tapeStopConfig.id]: tapeStopConfig,
   [lofiTapeConfig.id]: lofiTapeConfig,
+  [utilityConfig.id]: utilityConfig,
 }
 
 // Get list of effects for dropdown
@@ -91,5 +93,6 @@ export {
   ringModulatorConfig,
   tapTempoDelayConfig,
   tapeStopConfig,
-  lofiTapeConfig
+  lofiTapeConfig,
+  utilityConfig
 }

@@ -2176,6 +2176,12 @@ function createEffect(effectId, params, tabLiveParams) {
       console.log(`🎵 LO-FI TAPE created:`, typeof result, result)
       return result
 
+    case 'utility':
+      console.log(`🎵 CREATING UTILITY EFFECT`)
+      result = createUtility(context, params, tabLiveParams)
+      console.log(`🎵 UTILITY created:`, typeof result, result)
+      return result
+
     default:
       console.warn(`🎵 Unknown effect: ${effectId} - FALLING BACK TO BITCRUSHER!`)
       result = createBitcrusher(context, params, tabLiveParams)
@@ -2192,6 +2198,97 @@ function effectInput(effect) {
 
 function effectOutput(effect) {
   return effect.output || effect
+}
+
+// Utility: gain, pan, stereo width, and polarity. Everything falls out of one
+// mid/side matrix, where M = 0.5(L+R) is what the channels share and
+// S = 0.5(L-R) is how they differ. Scaling S alone moves the stereo image:
+// width 0 leaves M only (mono), 1 reconstructs the input exactly, 2 doubles
+// the sides. No wet/dry here, since blending a utility back against its own
+// dry signal would just undo it.
+function createUtility(context, params, tabLiveParams) {
+  const liveParams = tabLiveParams
+  console.log('\u{1F3B5} UTILITY: Creating utility effect')
+
+  liveParams.gain = params.gain !== undefined ? params.gain : 0
+  liveParams.pan = params.pan !== undefined ? params.pan : 0
+  liveParams.width = params.width !== undefined ? params.width : 1
+  liveParams.invert = params.invert !== undefined ? params.invert : 0
+
+  const inputGain = context.createGain()
+  const outputGain = context.createGain()
+
+  // Force stereo so a mono source upmixes to L=R. The side channel then works
+  // out to silence and Width correctly does nothing, instead of the matrix
+  // collapsing on a single-channel input.
+  const stereoIn = context.createGain()
+  stereoIn.channelCount = 2
+  stereoIn.channelCountMode = 'explicit'
+  stereoIn.channelInterpretation = 'speakers'
+
+  const splitter = context.createChannelSplitter(2)
+  const merger = context.createChannelMerger(2)
+
+  // Polarity flip sits ahead of the matrix, so it changes what counts as mid
+  // and what counts as side. That's the whole point of a phase invert: content
+  // that was common to both channels becomes difference, and vice versa.
+  const invertR = context.createGain()
+  invertR.gain.value = liveParams.invert >= 0.5 ? -1 : 1
+
+  // The matrix itself: four fixed gains summing into a mid bus and a side bus
+  const midBus = context.createGain()
+  const sideBus = context.createGain()
+  const lToMid = context.createGain()
+  const rToMid = context.createGain()
+  const lToSide = context.createGain()
+  const rToSide = context.createGain()
+  lToMid.gain.value = 0.5
+  rToMid.gain.value = 0.5
+  lToSide.gain.value = 0.5
+  rToSide.gain.value = -0.5
+
+  // Width scales the side bus; mid passes at unity so the centre never moves
+  const widthGain = context.createGain()
+  widthGain.gain.value = liveParams.width
+  const sideNeg = context.createGain()
+  sideNeg.gain.value = -1
+
+  const panner = context.createStereoPanner()
+  panner.pan.value = liveParams.pan
+
+  outputGain.gain.value = Math.pow(10, liveParams.gain / 20)
+
+  inputGain.connect(stereoIn)
+  stereoIn.connect(splitter)
+
+  // Encode to mid/side, with the right channel passing through the polarity gain
+  splitter.connect(lToMid, 0)
+  splitter.connect(lToSide, 0)
+  splitter.connect(invertR, 1)
+  invertR.connect(rToMid)
+  invertR.connect(rToSide)
+  lToMid.connect(midBus)
+  rToMid.connect(midBus)
+  lToSide.connect(sideBus)
+  rToSide.connect(sideBus)
+
+  // Decode back to L/R: L = M + S*width, R = M - S*width
+  sideBus.connect(widthGain)
+  widthGain.connect(sideNeg)
+  midBus.connect(merger, 0, 0)
+  midBus.connect(merger, 0, 1)
+  widthGain.connect(merger, 0, 0)
+  sideNeg.connect(merger, 0, 1)
+
+  merger.connect(panner)
+  panner.connect(outputGain)
+
+  inputGain._invertR = invertR
+  inputGain._widthGain = widthGain
+  inputGain._panner = panner
+  inputGain._outputGain = outputGain
+
+  return { input: inputGain, output: outputGain }
 }
 
 // Build (or rebuild) a tab's full effect chain from a spec array of
@@ -2716,6 +2813,25 @@ function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
       }
       if (params.saturation !== undefined && slot.effect.input._updateSaturationCurve) {
         slot.effect.input._updateSaturationCurve()
+      }
+      break
+
+    case 'utility':
+      // Every utility parameter is a plain gain, so all four update live and
+      // none of them need a chain rebuild
+      if (params.gain !== undefined && slot.effect.input._outputGain) {
+        smoothParamChange(slot.effect.input._outputGain.gain, Math.pow(10, slot.liveParams.gain / 20), 0.02)
+      }
+      if (params.pan !== undefined && slot.effect.input._panner) {
+        smoothParamChange(slot.effect.input._panner.pan, slot.liveParams.pan, 0.02, 'linear')
+      }
+      if (params.width !== undefined && slot.effect.input._widthGain) {
+        smoothParamChange(slot.effect.input._widthGain.gain, slot.liveParams.width, 0.02, 'linear')
+      }
+      if (params.invert !== undefined && slot.effect.input._invertR) {
+        // Ramping +1 to -1 crosses zero, briefly nulling the right channel.
+        // That soft dip is what keeps the polarity flip from clicking.
+        smoothParamChange(slot.effect.input._invertR.gain, slot.liveParams.invert >= 0.5 ? -1 : 1, 0.02, 'linear')
       }
       break
 

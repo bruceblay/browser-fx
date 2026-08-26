@@ -96,6 +96,16 @@ export const FACTORY_PRESETS: Preset[] = [
     ]
   },
   {
+    id: 'factory_mono',
+    name: 'Mono',
+    midi: [],
+    slots: [
+      // Width 0 collapses the stereo image to the mid channel. A single-slot
+      // preset so it stays a listening setting rather than part of a sound.
+      { effectId: 'utility', enabled: true, params: { gain: 0, pan: 0, width: 0, invert: 0 } }
+    ]
+  },
+  {
     id: 'factory_robot',
     name: 'Cyborg',
     midi: [],
