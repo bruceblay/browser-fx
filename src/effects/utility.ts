@@ -39,7 +39,7 @@ export const utilityConfig: EffectConfig = {
   ],
   defaultValues: {
     gain: 0,      // unity
-    pan: 0,       // centre
+    pan: 0,       // center
     width: 1,     // untouched stereo image
     invert: 0     // polarity flip, unexposed (see above)
   },

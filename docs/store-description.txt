@@ -1,13 +1,16 @@
 Browser FX transforms your web audio experience with real-time professional audio effects. Capture any tab's audio, chain up to 4 effects, and shape the sound with studio-style knobs, an audio-reactive cymatic visualizer, and hands-on control from your MIDI controller.
 
-22 HIGH-QUALITY EFFECTS:
-Bitcrusher • CD Skipper • Reverb • Hall Reverb • Filter • Auto Filter • Comb Filter • Delay • Tap Delay • Distortion • Chorus • Phaser • Flanger • Tremolo • Vibrato • Auto Panner • Pitch Shifter • Ring Mod • Compressor • DJ EQ • Tape Stop • Lo-Fi Tape
+23 HIGH-QUALITY EFFECTS:
+Bitcrusher • CD Skipper • Reverb • Hall Reverb • Filter • Auto Filter • Comb Filter • Delay • Tap Delay • Distortion • Chorus • Phaser • Flanger • Tremolo • Vibrato • Auto Panner • Pitch Shifter • Ring Mod • Compressor • DJ EQ • Tape Stop • Lo-Fi Tape • Utility
 
 EFFECT CHAINS:
 Stack up to 4 effects and run them in series: bitcrush into reverb, filter into delay into tape. Drag to reorder the chain, switch each effect on and off without a click or pop, and even double up the same effect for extreme sounds.
 
+NEW: UTILITY AND MONO
+Utility is the everyday device the other 22 aren't: gain, pan, and stereo width on three knobs. Turn Width fully down to sum a track to mono, leave it centered to pass audio untouched, or push past center to widen the stereo image. Handy for one-earbud listening, for taming a badly panned mix, or just for adjusting level without reaching for the tab. There's a Mono preset that sets it up in one click.
+
 PRESETS:
-Seven presets to start from: Lo-Fi Radio, Chopped & Screwed, Wobbler, Warped Record, Jet Stream, Dub Echo and Cyborg. Load one and turn some knobs, then save the result as your own. Your presets store their MIDI mappings too, so loading one brings back your controller layout along with the sound.
+Eight presets to start from: Lo-Fi Radio, Chopped & Screwed, Wobbler, Warped Record, Jet Stream, Dub Echo, Mono and Cyborg. Load one and turn some knobs, then save the result as your own. Your presets store their MIDI mappings too, so loading one brings back your controller layout along with the sound.
 
 MIDI CONTROL:
 Map any MIDI controller with one-click MIDI learn: knobs control parameters, pads and buttons punch effects in and out. Mappings stick to each effect (even when you reorder the chain), and your controller keeps working with the popup closed.
@@ -15,13 +18,13 @@ Map any MIDI controller with one-click MIDI learn: knobs control parameters, pad
 KEY FEATURES:
 • Real-time audio processing on any website
 • Chain up to 4 effects with drag-to-reorder and per-effect bypass
-• Seven built-in presets, plus your own saved with their MIDI mappings
+• Eight built-in presets, plus your own saved with their MIDI mappings
 • Per-tab effects, run different chains on different tabs
 • Hardware MIDI control: knobs for parameters, pads for effect on/off
 • Studio-inspired interface with responsive knobs and per-effect color themes
 • Audio-reactive cymatic visualizer, a Chladni plate pattern driven by your sound
 • Live parameter adjustment while audio plays
-• Full stereo processing
+• Full stereo processing, with mono summing and width control when you want it
 • Settings automatically saved per tab
 
 PERFECT FOR:

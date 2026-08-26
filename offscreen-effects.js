@@ -93,6 +93,10 @@ function getTabState(tabId) {
       destinationNode: null,
       audioElement: null,
       currentStream: null,
+      // Whether the whole chain is bypassed. The capture stream stays live
+      // while this is true, so toggling the power LED is a gate crossfade
+      // rather than a stream teardown (which drops audio for a moment).
+      masterBypassed: false,
       // Ordered effect slots: [{ effectId, effect, liveParams, params, paramSpecs }]
       chain: []
     })
@@ -2318,6 +2322,9 @@ function buildChainForTab(chainSpec, tabId) {
       const liveParams = {}
       const effect = createEffect(slotSpec.effectId, slotSpec.params || {}, liveParams)
       const enabled = slotSpec.enabled !== false
+      // While the chain is master-bypassed every slot sits on its dry route, so
+      // a chain edited with the power LED off stays silent until it resumes
+      const wetOpen = enabled && !state.masterBypassed
 
       // Per-slot bypass wrapper: the input feeds both the effect and a dry
       // route, and two gates crossfade between them so toggling never clicks.
@@ -2331,8 +2338,8 @@ function buildChainForTab(chainSpec, tabId) {
       wetGate.connect(outGain)
       inGain.connect(dryGate)
       dryGate.connect(outGain)
-      wetGate.gain.value = enabled ? 1 : 0
-      dryGate.gain.value = enabled ? 0 : 1
+      wetGate.gain.value = wetOpen ? 1 : 0
+      dryGate.gain.value = wetOpen ? 0 : 1
 
       return {
         id: slotSpec.id || null,
@@ -2425,6 +2432,24 @@ function scheduleChainRebuild(tabId) {
       tabId
     )
   }, 150)
+}
+
+// Bypass or resume a tab's whole chain without touching the capture stream.
+// Tearing the stream down and rebuilding it costs a noticeable gap, because
+// Chrome has to hand the tab's audio back and forth; crossfading each slot onto
+// its existing dry route costs nothing and is inaudible.
+function setMasterBypass(tabId, bypassed) {
+  const state = tabAudioState.get(tabId)
+  if (!state) return false
+  state.masterBypassed = !!bypassed
+  for (const slot of state.chain || []) {
+    if (!slot.wetGate || !slot.dryGate) continue
+    const wetOpen = slot.enabled && !state.masterBypassed
+    smoothParamChange(slot.wetGate.gain, wetOpen ? 1 : 0, 0.02, 'linear')
+    smoothParamChange(slot.dryGate.gain, wetOpen ? 0 : 1, 0.02, 'linear')
+  }
+  console.log(`\u{1F3B5} Chain ${state.masterBypassed ? 'bypassed' : 'resumed'} for tab ${tabId}`)
+  return true
 }
 
 // Update parameters for specific tab
@@ -2868,12 +2893,15 @@ async function processAudioStreamForTab(streamId, tabId, chainSpec) {
     // (a plain gain bus), which feeds both the playback stream and an
     // analyser tap used by the popup's visualizer.
     state.sourceNode = new MediaStreamAudioSourceNode(ctx, { mediaStream: stream })
-    state.streamDestination = new MediaStreamAudioDestinationNode(ctx)
     state.destinationNode = ctx.createGain()
     state.analyser = ctx.createAnalyser()
     state.analyser.fftSize = 512
     state.analyser.smoothingTimeConstant = 0.5
-    state.destinationNode.connect(state.streamDestination)
+    // Straight to the hardware destination. This used to run through a
+    // MediaStreamAudioDestinationNode into an <audio> element, which added
+    // that element's jitter buffer to every effect's latency for no benefit:
+    // nothing consumes the MediaStream, we only ever played it back.
+    state.destinationNode.connect(ctx.destination)
     state.destinationNode.connect(state.analyser)
 
     // Build the effect chain from the spec sent by the popup
@@ -2881,10 +2909,12 @@ async function processAudioStreamForTab(streamId, tabId, chainSpec) {
 
     console.log(`🎵 Audio graph connected for tab ${tabId} (${chainSpec.length} slot chain)`)
 
-    // Play the processed stream
-    state.audioElement = new Audio()
-    state.audioElement.srcObject = state.streamDestination.stream
-    state.audioElement.autoplay = true
+    // An offscreen document opened for AUDIO_PLAYBACK is allowed to play
+    // without a gesture, but the context can still come up suspended if it was
+    // created before the document was granted playback
+    if (ctx.state === 'suspended') {
+      try { await ctx.resume() } catch (e) { console.warn('\u{1F3B5} AudioContext resume failed:', e) }
+    }
 
     state.currentStream = stream
 
@@ -2921,8 +2951,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Popup asking whether a tab is genuinely capturing (storage can be stale)
   if (message.type === "GET_TAB_STATUS") {
+    // Check the track, not just the object. Streams now outlive the power LED
+    // being switched off, so a stream that ended on its own (tab navigated, tab
+    // audio released) would otherwise read as live and the popup would try to
+    // resume a dead one instead of capturing again.
     const statusState = tabAudioState.get(message.tabId)
-    sendResponse({ capturing: !!(statusState && statusState.currentStream) })
+    const statusTrack = statusState && statusState.currentStream
+      ? statusState.currentStream.getAudioTracks()[0]
+      : null
+    sendResponse({ capturing: !!(statusTrack && statusTrack.readyState === 'live') })
     return
   }
 
@@ -2998,10 +3035,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const toggleSlot = toggleState && toggleState.chain && toggleState.chain[message.slotIndex]
     if (!toggleSlot || !toggleSlot.wetGate) return
     toggleSlot.enabled = !!message.enabled
-    smoothParamChange(toggleSlot.wetGate.gain, toggleSlot.enabled ? 1 : 0, 0.02, 'linear')
-    smoothParamChange(toggleSlot.dryGate.gain, toggleSlot.enabled ? 0 : 1, 0.02, 'linear')
+    // Record the intent either way, but only open the wet route if the whole
+    // chain isn't bypassed; resuming re-reads slot.enabled to restore this
+    const slotWetOpen = toggleSlot.enabled && !toggleState.masterBypassed
+    smoothParamChange(toggleSlot.wetGate.gain, slotWetOpen ? 1 : 0, 0.02, 'linear')
+    smoothParamChange(toggleSlot.dryGate.gain, slotWetOpen ? 0 : 1, 0.02, 'linear')
     console.log(`\u{1F3B5} Slot ${message.slotIndex} ${toggleSlot.enabled ? 'enabled' : 'bypassed'} for tab ${message.tabId}`)
     sendResponse({ success: true, message: "Slot toggled" })
+    return
+  }
+
+  if (message.type === "SET_BYPASS") {
+    // Ignore the popup's tabId-less broadcast copy (see STOP_STREAM above)
+    if (message.tabId === undefined) return
+    const ok = setMasterBypass(message.tabId, message.bypassed)
+    sendResponse({ success: ok, message: ok ? "Bypass set" : "No stream for tab" })
     return
   }
 

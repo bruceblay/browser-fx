@@ -155,6 +155,7 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Tap Delay</strong> - Beat-synced delay with tap tempo and subdivision control</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Tape Stop</strong> - Turntable power-down with pitch ramp to silence</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Lo-Fi Tape</strong> - Analog tape degradation with wow, flutter and saturation</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Utility</strong> - Gain, pan and stereo width; turn Width down to sum to mono</li>
           </ul>
 
           <h4 style={{

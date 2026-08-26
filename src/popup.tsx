@@ -71,6 +71,10 @@ function IndexPopup() {
   // Suppresses knob updates from offscreen frames right after a local drag,
   // so the UI doesn't fight the user's hand
   const lastLocalEditRef = useRef(0)
+  // Whether the offscreen document still holds a capture stream for this tab.
+  // Tracked separately from isCapturing, which now means "effects engaged":
+  // switching the power LED off bypasses the chain and leaves the stream up.
+  const streamLive = useRef(false)
 
   const knobSize = KNOB_SIZES[chain.length - 1]
   // The footer hint only renders when idle or in learn mode; reclaim its
@@ -166,20 +170,24 @@ function IndexPopup() {
             }
 
             setIsCapturing(savedState.isCapturing || false)
-
-            // Saved state can claim "capturing" after an extension reload
-            // killed the offscreen document. Verify against reality so the
-            // UI never shows a live state with nothing running behind it.
-            if (savedState.isCapturing) {
-              chrome.runtime.sendMessage({ type: "GET_TAB_STATUS", tabId: activeTab.id }, (response) => {
-                const err = chrome.runtime.lastError
-                if (err || !response?.capturing) {
-                  console.log("Saved capture state was stale, resetting to off")
-                  setIsCapturing(false)
-                }
-              })
-            }
           }
+
+          // Always ask whether a stream is live for this tab, not just when we
+          // think we're on: the power LED now bypasses instead of tearing the
+          // stream down, so "off" and "stream still captured" is a normal
+          // combination, and resuming has to know which path to take.
+          chrome.runtime.sendMessage({ type: "GET_TAB_STATUS", tabId: activeTab.id }, (response) => {
+            const err = chrome.runtime.lastError
+            const live = !err && !!response?.capturing
+            streamLive.current = live
+            // Saved state can also claim "capturing" after an extension reload
+            // killed the offscreen document. Verify against reality so the UI
+            // never shows a live state with nothing running behind it.
+            if (!live && savedState?.isCapturing) {
+              console.log("Saved capture state was stale, resetting to off")
+              setIsCapturing(false)
+            }
+          })
         }
       } catch (error) {
         console.error("Failed to load saved state:", error)
@@ -328,6 +336,19 @@ function IndexPopup() {
 
   const handleStartCapture = () => {
     if (startPending.current) return
+
+    // The stream is already captured and merely bypassed, so resuming is a gate
+    // crossfade. Re-running the capture handoff here is what used to drop audio
+    // for a moment on every toggle.
+    if (streamLive.current) {
+      setStartFailed(false)
+      setIsCapturing(true)
+      // Push the chain first: edits made while bypassed never reached offscreen
+      sendChain(chain)
+      chrome.runtime.sendMessage({ type: "SET_BYPASS", bypassed: false })
+      return
+    }
+
     startPending.current = true
     setStartFailed(false)
     setIsCapturing(true)
@@ -364,6 +385,7 @@ function IndexPopup() {
         setStartFailed(true)
       } else {
         console.log("Capture started successfully")
+        streamLive.current = true
       }
     })
   }
@@ -371,6 +393,14 @@ function IndexPopup() {
   const handleStopCapture = () => {
     if (startPending.current) return
     setIsCapturing(false)
+
+    // Bypass rather than stop. The tab stays captured, which is what makes
+    // switching back on seamless; the clear button still releases it outright.
+    if (streamLive.current) {
+      chrome.runtime.sendMessage({ type: "SET_BYPASS", bypassed: true })
+      return
+    }
+
     chrome.runtime.sendMessage({
       type: "STOP_CAPTURE"
     })
@@ -379,6 +409,7 @@ function IndexPopup() {
   const handleClearStreams = () => {
     setIsCapturing(false)
     setStartFailed(false)
+    streamLive.current = false
     chrome.runtime.sendMessage({
       type: "CLEAR_ALL_STREAMS"
     })

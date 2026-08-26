@@ -113,6 +113,12 @@ async function startCapture(message: { chain?: unknown }) {
   console.log("Message sent to offscreen document successfully")
 }
 
+// A captured stream now outlives the power LED being switched off, so nothing
+// would release it when its tab goes away. Drop it with the tab.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  sendToOffscreen({ type: "STOP_STREAM", tabId })
+})
+
 // Push MIDI mapping changes to the offscreen document, which can't observe
 // chrome.storage itself
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -187,6 +193,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       enabled: message.enabled
     })
     sendResponse({ success: true, message: "Slot toggled" })
+    return
+  }
+
+  if (message.type === "SET_BYPASS") {
+    console.log("Processing SET_BYPASS request:", message.bypassed)
+    forwardWithActiveTab({
+      type: "SET_BYPASS",
+      bypassed: message.bypassed
+    })
+    sendResponse({ success: true, message: "Bypass forwarded" })
     return
   }
 
