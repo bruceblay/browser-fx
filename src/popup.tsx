@@ -360,6 +360,7 @@ function IndexPopup() {
 
     chrome.runtime.sendMessage({
       type: "START_CAPTURE",
+      tabId: currentTabId ?? undefined,
       chain: chainWithSpecs(chain)
     }, (response) => {
       startPending.current = false
