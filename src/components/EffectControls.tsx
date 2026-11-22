@@ -37,6 +37,9 @@ const arcPath = (cx: number, cy: number, r: number, startAngle: number, endAngle
 }
 
 const formatValue = (v: number, param: ParameterConfig): string => {
+  if (param.valueLabels) {
+    return param.valueLabels[Math.round((v - param.min) / param.step)] ?? `${v}`
+  }
   switch (param.unit) {
     // Percent params come in two scales: 0..1 fractions and 0..100 ranges
     case '%': return param.max > 1 ? `${Math.round(v)}%` : `${Math.round(v * 100)}%`

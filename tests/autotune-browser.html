@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; object-src 'none'">
+  <title>Browser FX — Auto Tune listening test</title>
+  <style>
+    body { font: 16px system-ui; max-width: 760px; margin: 48px auto; padding: 0 24px; color: #eee; background: #202024; }
+    label { display: inline-flex; flex-direction: column; gap: 8px; margin: 12px 16px 12px 0; }
+    button, select, input { font: inherit; padding: 8px; }
+    button { cursor: pointer; margin: 12px 8px 12px 0; }
+    audio { display: block; width: 100%; margin: 12px 0 24px; }
+    pre { white-space: pre-wrap; background: #303036; padding: 16px; }
+    a { color: #d6a5f2; }
+    #connect { background: #c780e8; color: #17131c; border: 0; border-radius: 4px; }
+    button:disabled { cursor: default; opacity: 0.45; }
+    details { margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <h1>Auto Tune listening test</h1>
+  <p>Automatic note tuning with the new pitch engine, using the same effect as the extension. Open this page and YouTube in <strong>Chrome</strong>.</p>
+  <ol>
+    <li><a href="https://www.youtube.com/results?search_query=solo+singing+acapella+raw+vocals" target="_blank" rel="noopener">Find a vocal on YouTube</a> and start playing it.</li>
+    <li>Click <strong>Connect YouTube tab</strong>, select that tab, and enable <strong>Share tab audio</strong>.</li>
+    <li>Adjust the controls here, or switch between Original and Auto Tune while it plays.</li>
+  </ol>
+  <p>A solo voice makes the correction easiest to hear. You can use any audio tab; full songs also shift the accompaniment.</p>
+  <div>
+    <label>Key<select id="key"><option>C</option><option>C♯</option><option>D</option><option>E♭</option><option>E</option><option>F</option><option>F♯</option><option>G</option><option>A♭</option><option>A</option><option>B♭</option><option>B</option></select></label>
+    <label>Scale<select id="scale"><option>Chromatic</option><option selected>Major</option><option>Minor</option><option>Major pentatonic</option><option>Minor pentatonic</option></select></label>
+    <label>Retune (ms)<input id="retune" type="number" min="0" max="300" step="5" value="0"></label>
+    <label>Mix (%)<input id="wet" type="number" min="0" max="100" value="100"></label>
+  </div>
+  <button id="connect">Connect YouTube tab</button>
+  <button id="compare" disabled aria-pressed="false">Hear original</button>
+  <button id="stop" disabled>Stop</button>
+  <pre id="status" role="status">Ready. Start with Major or Minor pentatonic, Retune 0ms, and Mix 100% for an obvious effect. Set Key to match the music.</pre>
+  <p id="tracking">Waiting for a voice.</p>
+  <p><a href="pitch-engine.html">Fixed pitch engine comparison</a></p>
+  <details>
+    <summary>Synthetic demo and developer checks</summary>
+    <button id="render">Render synthetic comparison</button><button id="check">Run browser checks</button>
+    <label for="original">Original demo</label><audio id="original" controls></audio>
+    <label for="corrected">Corrected demo (90ms delay trimmed)</label><audio id="corrected" controls></audio>
+  </details>
+  <!-- Only the extension messaging boundary is stubbed. Audio and effect-chain
+       code are the real implementation, running in Chrome's Web Audio engine. -->
+  <script src="extension-stub.js"></script>
+  <script src="../offscreen-effects.js"></script>
+  <script src="autotune-browser.js"></script>
+</body>
+</html>

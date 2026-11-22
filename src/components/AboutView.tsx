@@ -92,7 +92,7 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
           overscrollBehavior: 'contain'
         }}>
           <p style={{ margin: '0 0 10px 0' }}>
-            <strong style={{ color: theme.textBright }}>Browser FX</strong> is a real-time audio effects processor for web pages.
+            <strong style={{ color: theme.textBright }}>Browser FX</strong> brings 24 real-time audio effects to web pages, including Auto Tune for musical vocal pitch correction.
           </p>
 
           <h4 style={{
@@ -106,13 +106,14 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
             presets
           </h4>
           <p style={{ margin: '0 0 8px 0' }}>
-            Open the disk icon in the title bar for seven presets to start from:{' '}
+            Open the disk icon in the title bar for eight presets to start from:{' '}
             <strong style={{ color: theme.text }}>Lo-Fi Radio</strong>,{' '}
             <strong style={{ color: theme.text }}>Chopped &amp; Screwed</strong>,{' '}
             <strong style={{ color: theme.text }}>Wobbler</strong>,{' '}
             <strong style={{ color: theme.text }}>Warped Record</strong>,{' '}
             <strong style={{ color: theme.text }}>Jet Stream</strong>,{' '}
-            <strong style={{ color: theme.text }}>Dub Echo</strong> and{' '}
+            <strong style={{ color: theme.text }}>Dub Echo</strong>,{' '}
+            <strong style={{ color: theme.text }}>Mono</strong> and{' '}
             <strong style={{ color: theme.text }}>Cyborg</strong>.
           </p>
           <p style={{ margin: '0 0 12px 0' }}>
@@ -134,6 +135,7 @@ export function AboutView({ onBack, isCapturing, tabId }: AboutViewProps) {
           </h4>
           <ul style={{ paddingLeft: 18, margin: '0 0 12px 0' }}>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Bitcrusher</strong> - Digital degradation and lo-fi sounds</li>
+            <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Auto Tune</strong> - Snap solo vocals to a key and scale, from hard tuning to smooth pitch glides</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>CD Skipper</strong> - Rhythmic audio capture and loop playback</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Reverb</strong> - Spacious ambient reverb</li>
             <li style={{ marginBottom: 6 }}><strong style={{ color: theme.text }}>Filter</strong> - Low-pass filter with cutoff frequency and resonance control</li>

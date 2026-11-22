@@ -1,16 +1,19 @@
 Browser FX transforms your web audio experience with real-time professional audio effects. Capture any tab's audio, chain up to 4 effects, and shape the sound with studio-style knobs, an audio-reactive cymatic visualizer, and hands-on control from your MIDI controller.
 
-23 HIGH-QUALITY EFFECTS:
-Bitcrusher • CD Skipper • Reverb • Hall Reverb • Filter • Auto Filter • Comb Filter • Delay • Tap Delay • Distortion • Chorus • Phaser • Flanger • Tremolo • Vibrato • Auto Panner • Pitch Shifter • Ring Mod • Compressor • DJ EQ • Tape Stop • Lo-Fi Tape • Utility
+WHAT IT DOES TO YOUR AUDIO:
+There are 24 effects, and they fall into a few families. Some degrade the signal on purpose, crushing it down to a few bits, skipping like a scratched CD, or warping it like worn tape. Some add space and echo, with two flavors of reverb and two of delay. Some move the sound around while it plays, sweeping filters, swirling the stereo image, and wobbling pitch or volume. Auto Tune snaps a solo voice to notes in a musical scale. The rest are the practical ones you would find on a mixing desk: EQ, compression, pitch shifting, and a Utility for gain, pan, and stereo width.
+
+NEW: AUTO TUNE
+Give solo vocals a tuned sound with four controls: Key, Scale, Retune, and Mix. Choose a major, minor, or pentatonic scale, or use chromatic tuning. Set Retune to zero for hard note snapping, or turn it up for smoother pitch glides. Pentatonic scales allow fewer notes for a more pronounced effect. Auto Tune works best on a single voice; it does not separate vocals from a full music mix.
 
 EFFECT CHAINS:
 Stack up to 4 effects and run them in series: bitcrush into reverb, filter into delay into tape. Drag to reorder the chain, switch each effect on and off without a click or pop, and even double up the same effect for extreme sounds.
 
-NEW: UTILITY AND MONO
-Utility is the everyday device the other 22 aren't: gain, pan, and stereo width on three knobs. Turn Width fully down to sum a track to mono, leave it centered to pass audio untouched, or push past center to widen the stereo image. Handy for one-earbud listening, for taming a badly panned mix, or just for adjusting level without reaching for the tab. There's a Mono preset that sets it up in one click.
+UTILITY AND MONO
+Utility puts gain, pan, and stereo width on three knobs. Turn Width fully down to sum a track to mono, leave it centered to pass audio untouched, or push past center to widen the stereo image. Handy for one-earbud listening, for taming a badly panned mix, or just for adjusting level without reaching for the tab. There's a Mono preset that sets it up in one click.
 
 PRESETS:
-Eight presets to start from: Lo-Fi Radio, Chopped & Screwed, Wobbler, Warped Record, Jet Stream, Dub Echo, Mono and Cyborg. Load one and turn some knobs, then save the result as your own. Your presets store their MIDI mappings too, so loading one brings back your controller layout along with the sound.
+Eight presets to start from, including Lo-Fi Radio, Chopped & Screwed, Dub Echo and Mono. Load one and turn some knobs, then save the result as your own. Your presets store their MIDI mappings too, so loading one brings back your controller layout along with the sound.
 
 MIDI CONTROL:
 Map any MIDI controller with one-click MIDI learn: knobs control parameters, pads and buttons punch effects in and out. Mappings stick to each effect (even when you reorder the chain), and your controller keeps working with the popup closed.
@@ -27,8 +30,8 @@ KEY FEATURES:
 • Full stereo processing, with mono summing and width control when you want it
 • Settings automatically saved per tab
 
-PERFECT FOR:
-Music streaming • Video content • Content creation • Audio experimentation • Lo-fi listening sessions
+WHO IT'S FOR:
+Anyone who wants more control over the audio coming out of a browser tab, whether that's roughing up a music stream, adding echo to a video, or summing a badly mixed track to mono so it works in one earbud.
 
 SIMPLE TO USE:
 1. Click the Browser FX icon

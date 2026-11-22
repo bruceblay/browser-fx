@@ -3,36 +3,12 @@
 const fs = require('fs')
 const path = require('path')
 
-// Recursive directory copy function
-function copyDirSync(src, dest) {
-  if (!fs.existsSync(src)) {
-    return false
-  }
-
-  if (!fs.existsSync(dest)) {
-    fs.mkdirSync(dest, { recursive: true })
-  }
-
-  const entries = fs.readdirSync(src, { withFileTypes: true })
-
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name)
-    const destPath = path.join(dest, entry.name)
-
-    if (entry.isDirectory()) {
-      copyDirSync(srcPath, destPath)
-    } else {
-      fs.copyFileSync(srcPath, destPath)
-    }
-  }
-
-  return true
-}
-
 // Copy offscreen files to PROD build directory
 const sourceFiles = [
   'offscreen.html',
   'offscreen-effects.js',
+  'autotune-worklet.js',
+  'autotune-licenses.txt',
   'midi-setup.html',
   'midi-setup.js'
 ]
@@ -54,16 +30,9 @@ sourceFiles.forEach(file => {
   const sourcePath = path.join(__dirname, '..', file)
   const targetPath = path.join(buildDir, file)
 
-  if (fs.existsSync(sourcePath)) {
-    try {
-      fs.copyFileSync(sourcePath, targetPath)
-      console.log(`✅ Copied ${file}`)
-    } catch (err) {
-      console.error(`❌ Error copying ${file}:`, err.message)
-    }
-  } else {
-    console.warn(`⚠️  Source file not found: ${file}`)
-  }
+  // Required runtime assets must fail the build if missing or unreadable.
+  fs.copyFileSync(sourcePath, targetPath)
+  console.log(`✅ Copied ${file}`)
 })
 
 // No external files to copy

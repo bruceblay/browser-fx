@@ -1,8 +1,8 @@
 {
   "name": "browser-fx",
   "displayName": "Browser FX: Tab Audio Effects + MIDI",
-  "version": "0.3.0",
-  "description": "Real-time audio effects for any tab: reverb, filter, EQ, bitcrusher, delay + 18 more. Chain 4 effects, presets, MIDI control.",
+  "version": "0.4.0",
+  "description": "Real-time audio effects, including Auto Tune, for any browser tab. Chain up to 4 effects, use MIDI, and save presets.",
   "author": "Bruce Blay <bruceblay@gmail.com>",
   "contributors": [
     {
@@ -10,18 +10,25 @@
     }
   ],
   "scripts": {
+    "predev": "npm run build:autotune",
+    "prebuild": "npm run build:autotune",
+    "build:autotune": "node scripts/build-autotune.js",
+    "test:autotune": "npm run build:autotune && node --test tests/autotune.test.cjs",
     "dev": "plasmo dev",
     "dev:setup": "npm run dev && npm run copy-offscreen:dev",
     "build": "plasmo build && npm run copy-offscreen:prod",
     "package": "plasmo package",
     "copy-offscreen:dev": "node scripts/copy-offscreen-dev.js",
-    "copy-offscreen:prod": "node scripts/copy-offscreen-prod.js"
+    "copy-offscreen:prod": "node scripts/copy-offscreen-prod.js",
+    "release": "npm run test:autotune && npm run build && npm run package"
   },
   "dependencies": {
+    "pitchy": "4.1.0",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-knob-headless": "^0.4.0",
+    "signalsmith-stretch": "1.3.2",
     "tone": "^15.1.22"
   },
   "devDependencies": {
@@ -30,10 +37,14 @@
     "@types/node": "20.11.5",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
+    "esbuild": "0.18.20",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
   },
   "manifest": {
+    "content_security_policy": {
+      "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    },
     "host_permissions": [
       "https://*/*"
     ],
@@ -51,7 +62,8 @@
           "<all_urls>"
         ]
       }
-    ]
+    ],
+    "minimum_chrome_version": "116"
   },
   "directories": {
     "doc": "docs"

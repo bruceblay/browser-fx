@@ -1,5 +1,6 @@
 import { EffectConfig } from './types'
 import { bitcrusherConfig } from './bitcrusher'
+import { autoTuneConfig } from './autotune'
 import { reverbConfig } from './reverb'
 import { distortionConfig } from './distortion'
 import { chorusConfig } from './chorus'
@@ -26,6 +27,7 @@ import { utilityConfig } from './utility'
 // Registry of all available effects
 export const EFFECTS: Record<string, EffectConfig> = {
   [bitcrusherConfig.id]: bitcrusherConfig,
+  [autoTuneConfig.id]: autoTuneConfig,
   [loopChopConfig.id]: loopChopConfig,
   [reverbConfig.id]: reverbConfig,
   [simpleFilterConfig.id]: simpleFilterConfig,
@@ -73,6 +75,7 @@ export const getEffectDefaults = (effectId: string): Record<string, number> => {
 export * from './types'
 export {
   bitcrusherConfig,
+  autoTuneConfig,
   loopChopConfig,
   reverbConfig,
   simpleFilterConfig,

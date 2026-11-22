@@ -41,12 +41,14 @@ I built a Chrome extension that adds audio effects to any browser tab.
 
 I wanted to play around with the Web Audio API. Instead of making a browser synth
 or a drum machine, I thought I'd make something that worked with those things.
-That's what Browser FX is. It works on YouTube or a web synth.
 
-There are 22 effects and four slots to combine them in. I also added MIDI support. You can map the knobs to a hardware
+There are 24 effects and four slots to combine them in. I added Auto Tune to snap
+vocals to a musical scale. I also added MIDI support and some presets. You can map the knobs to a hardware
 controller.
 
-It's free and fun. Check it out.
+It's free. Check it out.
+
+https://chromewebstore.google.com/detail/oanepaeodkjbadgpgkolbidpbflbmmmd?utm_source=item-share-cb
 ```
 
 First comment:
@@ -57,12 +59,13 @@ https://chromewebstore.google.com/detail/browser-fx/oanepaeodkjbadgpgkolbidpbflb
 
 ## Open decision: which combination number
 
-- **234,256** is exactly 22^4. It counts only the case where all four slots are
+- **331,776** is exactly 24^4. It counts only the case where all four slots are
   filled and slot order matters.
-- **245,410** is 22 + 22^2 + 22^3 + 22^4. It covers chains of one, two, three, or
+- **346,200** is 24 + 24^2 + 24^3 + 24^4. It covers chains of one, two, three, or
   four effects.
 
-Both are defensible. 234,256 is the one in the draft.
+Both count ordered chains with repeated effects allowed. The current draft uses
+the effect count instead.
 
 ## Voice notes
 

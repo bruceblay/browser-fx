@@ -5,6 +5,21 @@ console.log("🎵 OFFSCREEN DOCUMENT IS WORKING AND LOADED!")
 window.postMessage({ type: 'OFFSCREEN_LOADED' }, '*')
 
 let audioContext = null
+const autoTuneModules = new WeakMap()
+
+// Load once before capture builds its synchronous effect chain. Other effects
+// can still run if the module fails to load; Auto Tune then fails explicitly.
+function prepareAutoTune(context) {
+  if (!autoTuneModules.has(context)) {
+    autoTuneModules.set(context, context.audioWorklet.addModule(
+      chrome.runtime.getURL('autotune-worklet.js')
+    ).catch(error => {
+      autoTuneModules.delete(context)
+      throw error
+    }))
+  }
+  return autoTuneModules.get(context)
+}
 
 // Per-tab audio processing state
 const tabAudioState = new Map()
@@ -118,11 +133,7 @@ function cleanupTabState(tabId) {
   }
   if (state.chain) {
     for (const slot of state.chain) {
-      try {
-        (slot.outGain || effectOutput(slot.effect)).disconnect()
-      } catch (error) {
-        console.warn("Error disconnecting effect:", error)
-      }
+      disposeEffectSlot(slot)
     }
   }
   if (state.destinationNode) {
@@ -919,6 +930,83 @@ function createPitchShifter(context, params, tabLiveParams) {
   }
 
   return { input: inputGain, output: outputGain }
+}
+
+// Auto Tune owns its detector and shifter on the audio rendering thread.
+// Keep its four controls numeric for preset storage and MIDI CC mapping.
+function createAutoTune(context, params, tabLiveParams) {
+  const defaults = { key: 0, scale: 1, retune: 0, wet: 1 }
+  const bounds = { key: [0, 11], scale: [0, 4], retune: [0, 300], wet: [0, 1] }
+  // Match the worklet's 80 ms window + 10 ms split-computation interval.
+  const latency = (Math.round(context.sampleRate * 0.08) + Math.round(context.sampleRate * 0.01)) / context.sampleRate
+  const clean = (key, value) => {
+    const [min, max] = bounds[key]
+    const result = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : defaults[key]
+    return key === 'key' || key === 'scale' ? Math.round(result) : result
+  }
+  for (const key of Object.keys(defaults)) tabLiveParams[key] = clean(key, params[key])
+  const processor = new AudioWorkletNode(context, 'browser-fx-autotune', {
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
+    channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers',
+    parameterData: { ...tabLiveParams }
+  })
+  const input = context.createGain()
+  const output = context.createGain()
+  const wetGate = context.createGain()
+  const fallbackDelay = context.createDelay(latency + 0.01)
+  const fallbackGate = context.createGain()
+  fallbackDelay.delayTime.value = latency
+  fallbackGate.gain.value = 0
+  input.connect(processor)
+  processor.connect(wetGate).connect(output)
+  input.connect(fallbackDelay).connect(fallbackGate).connect(output)
+  let resolveReady, onPitch = null
+  const ready = new Promise(resolve => { resolveReady = resolve })
+  const fail = message => {
+    clearTimeout(readyTimeout)
+    console.error('Auto Tune failed; falling back to delayed dry audio:', message)
+    smoothParamChange(wetGate.gain, 0, 0.01, 'linear')
+    smoothParamChange(fallbackGate.gain, 1, 0.01, 'linear')
+    resolveReady({ ok: false, message })
+  }
+  const readyTimeout = setTimeout(() => fail('Engine initialization timed out'), 10000)
+  processor.onprocessorerror = () => fail('AudioWorklet processor error')
+  processor.port.onmessage = ({ data }) => {
+    if (data.type === 'ready') {
+      clearTimeout(readyTimeout)
+      resolveReady({ ok: true, latency: data.latency })
+    } else if (data.type === 'error') fail(data.message)
+    else if (data.type === 'pitch' && onPitch) onPitch(data)
+  }
+  return {
+    input, output, latency, ready,
+    setTelemetry(callback) {
+      onPitch = callback
+      processor.port.postMessage({ type: 'telemetry', enabled: !!callback })
+    },
+    update(changes) {
+      for (const key of Object.keys(defaults)) {
+        if (changes[key] === undefined) continue
+        const value = clean(key, changes[key])
+        tabLiveParams[key] = value
+        processor.parameters.get(key).setValueAtTime(value, context.currentTime)
+      }
+    },
+    dispose() {
+      clearTimeout(readyTimeout)
+      resolveReady({ ok: false, message: 'Disposed' })
+      processor.onprocessorerror = null
+      processor.port.onmessage = null
+      processor.port.postMessage('dispose')
+      processor.port.close()
+      input.disconnect()
+      processor.disconnect()
+      wetGate.disconnect()
+      fallbackDelay.disconnect()
+      fallbackGate.disconnect()
+      output.disconnect()
+    }
+  }
 }
 
 // Auto Panner Effect Implementation
@@ -2045,6 +2133,9 @@ function createEffect(effectId, params, tabLiveParams) {
 
   let result
   switch (effectId) {
+    case 'autotune':
+      return createAutoTune(context, params, tabLiveParams)
+
     case 'bitcrusher':
       result = createBitcrusher(context, params, tabLiveParams)
       console.log(`🎵 BITCRUSHER created:`, typeof result, result)
@@ -2204,6 +2295,13 @@ function effectOutput(effect) {
   return effect.output || effect
 }
 
+function disposeEffectSlot(slot) {
+  try { if (slot.effect.dispose) slot.effect.dispose() } catch (e) { console.warn('Effect disposal failed', e) }
+  for (const node of [slot.inGain, slot.outGain, slot.wetGate, slot.dryGate, slot.dryDelay, effectOutput(slot.effect)]) {
+    try { if (node) node.disconnect() } catch (e) {}
+  }
+}
+
 // Utility: gain, pan, stereo width, and polarity. Everything falls out of one
 // mid/side matrix, where M = 0.5(L+R) is what the channels share and
 // S = 0.5(L-R) is how they differ. Scaling S alone moves the stereo image:
@@ -2316,9 +2414,9 @@ function buildChainForTab(chainSpec, tabId) {
   }
 
   // Create all slots first; on failure keep the current chain running
-  let newChain
+  const newChain = []
   try {
-    newChain = chainSpec.map((slotSpec) => {
+    for (const slotSpec of chainSpec) {
       const liveParams = {}
       const effect = createEffect(slotSpec.effectId, slotSpec.params || {}, liveParams)
       const enabled = slotSpec.enabled !== false
@@ -2336,12 +2434,20 @@ function buildChainForTab(chainSpec, tabId) {
       inGain.connect(effectInput(effect))
       effectOutput(effect).connect(wetGate)
       wetGate.connect(outGain)
-      inGain.connect(dryGate)
+      // A latency-bearing processor needs the same delay on its bypass path;
+      // otherwise toggling bypass blends two differently timed copies.
+      const dryDelay = effect.latency ? audioContext.createDelay(effect.latency + 0.01) : null
+      if (dryDelay) {
+        dryDelay.delayTime.value = effect.latency
+        inGain.connect(dryDelay).connect(dryGate)
+      } else {
+        inGain.connect(dryGate)
+      }
       dryGate.connect(outGain)
       wetGate.gain.value = wetOpen ? 1 : 0
       dryGate.gain.value = wetOpen ? 0 : 1
 
-      return {
+      newChain.push({
         id: slotSpec.id || null,
         effectId: slotSpec.effectId,
         effect,
@@ -2352,10 +2458,12 @@ function buildChainForTab(chainSpec, tabId) {
         inGain,
         outGain,
         wetGate,
-        dryGate
-      }
-    })
+        dryGate,
+        dryDelay
+      })
+    }
   } catch (error) {
+    for (const slot of newChain) disposeEffectSlot(slot)
     console.error(`\u{1F3B5} Failed to build chain for tab ${tabId}:`, error)
     throw error
   }
@@ -2367,6 +2475,7 @@ function buildChainForTab(chainSpec, tabId) {
 
   const oldChain = state.chain || []
   const crossfadeTime = 0.05
+  const warmupTime = newChain.reduce((total, slot) => total + (slot.effect.latency || 0), 0)
 
   if (state.sourceNode && state.destinationNode) {
     if (oldChain.length) {
@@ -2374,10 +2483,13 @@ function buildChainForTab(chainSpec, tabId) {
         const now = audioContext.currentTime
         const oldGain = audioContext.createGain()
         const newGain = audioContext.createGain()
-        oldGain.gain.setValueAtTime(1.0, now)
-        oldGain.gain.linearRampToValueAtTime(0.0, now + crossfadeTime)
+        // Fill any lookahead buffers before fading away the audible old chain.
+        const fadeAt = now + warmupTime
+        oldGain.gain.setValueAtTime(1.0, fadeAt)
+        oldGain.gain.linearRampToValueAtTime(0.0, fadeAt + crossfadeTime)
         newGain.gain.setValueAtTime(0.0, now)
-        newGain.gain.linearRampToValueAtTime(1.0, now + crossfadeTime)
+        newGain.gain.setValueAtTime(0.0, fadeAt)
+        newGain.gain.linearRampToValueAtTime(1.0, fadeAt + crossfadeTime)
 
         // Route the old chain's tail through the fade-out gain
         const oldTail = oldChain[oldChain.length - 1].outGain || effectOutput(oldChain[oldChain.length - 1].effect)
@@ -2397,9 +2509,9 @@ function buildChainForTab(chainSpec, tabId) {
           try { sourceNode.disconnect(oldHead) } catch (e) {}
           try { oldGain.disconnect() } catch (e) {}
           for (const slot of oldChain) {
-            try { (slot.outGain || effectOutput(slot.effect)).disconnect() } catch (e) {}
+            disposeEffectSlot(slot)
           }
-        }, crossfadeTime * 1000 + 100)
+        }, (warmupTime + crossfadeTime) * 1000 + 100)
       } catch (error) {
         console.error(`\u{1F3B5} ERROR during chain crossfade for tab ${tabId}:`, error)
         try {
@@ -2407,6 +2519,7 @@ function buildChainForTab(chainSpec, tabId) {
           state.sourceNode.connect(newChain[0].inGain)
           newChain[newChain.length - 1].outGain.connect(state.destinationNode)
         } catch (e) {}
+        for (const slot of oldChain) disposeEffectSlot(slot)
       }
     } else {
       state.sourceNode.connect(newChain[0].inGain)
@@ -2488,6 +2601,10 @@ function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
   // Note: For simplicity, I'm only implementing the most commonly changed parameters
   // The bitcrusher parameters will update automatically via the tab's liveParams reference
   switch (slot.effectId) {
+    case 'autotune':
+      slot.effect.update(params)
+      break
+
     case 'bitcrusher':
       // Bitcrusher parameters are updated automatically via liveParams in the audio callback
       break
@@ -2872,10 +2989,18 @@ function updateEffectParamsForTab(effectId, params, tabId, slotIndex = 0) {
 // Process audio stream for specific tab
 async function processAudioStreamForTab(streamId, tabId, chainSpec) {
   console.log(`🎵 Processing audio stream for tab ${tabId} with ID:`, streamId)
+  const state = getTabState(tabId)
 
   try {
     const ctx = initializeAudioContext()
-    const state = getTabState(tabId)
+
+    try {
+      await prepareAutoTune(ctx)
+    } catch (error) {
+      if (chainSpec.some(slot => slot.effectId === 'autotune')) throw error
+      console.warn('Auto Tune unavailable:', error)
+    }
+    if (tabAudioState.get(tabId) !== state) throw new Error('Capture was cancelled')
 
     // Get the MediaStream using the stream ID
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -2886,6 +3011,12 @@ async function processAudioStreamForTab(streamId, tabId, chainSpec) {
         }
       }
     })
+
+    if (tabAudioState.get(tabId) !== state) {
+      stream.getTracks().forEach(track => track.stop())
+      throw new Error('Capture was cancelled')
+    }
+    state.currentStream = stream
 
     console.log(`🎵 MediaStream obtained for tab ${tabId}:`, stream)
 
@@ -2916,15 +3047,13 @@ async function processAudioStreamForTab(streamId, tabId, chainSpec) {
       try { await ctx.resume() } catch (e) { console.warn('\u{1F3B5} AudioContext resume failed:', e) }
     }
 
-    state.currentStream = stream
-
     console.log(`🎵 Audio processing setup complete for tab ${tabId}!`)
 
   } catch (error) {
     console.error(`🎵 Error setting up audio processing for tab ${tabId}:`, error)
     // Propagate so PROCESS_STREAM reports failure and the popup reverts,
     // instead of showing an on state with no audio processing behind it
-    cleanupTabState(tabId)
+    if (tabAudioState.get(tabId) === state) cleanupTabState(tabId)
     throw error
   }
 }

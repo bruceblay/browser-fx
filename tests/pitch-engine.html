@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; object-src 'none'; connect-src 'self'">
+  <title>Browser FX — Pitch engine comparison</title>
+  <link rel="stylesheet" href="pitch-engine.css">
+</head>
+<body>
+  <h1>Pitch engine comparison</h1>
+  <p><a href="autotune-browser.html">Try the integrated Auto Tune effect</a> with automatic notes and scales.</p>
+  <p>Try the new pitch shifter on a playing YouTube tab. Start with <strong>Up 3</strong> or <strong>Down 3</strong>, then compare with <strong>Original</strong>.</p>
+  <ol>
+    <li>Play a voice or song in another Chrome tab.</li>
+    <li>Connect that tab below and enable <strong>Share tab audio</strong>.</li>
+    <li>Listen for a clear pitch change, vocal texture, and clicks or graininess.</li>
+  </ol>
+  <p>This tests Signalsmith Stretch. Automatic note correction is not enabled yet.</p>
+  <div class="setup">
+    <label>Engine setting
+      <select id="profile">
+        <option value="quality">Longer window — 120 ms</option>
+        <option value="responsive">Shorter window — 60 ms</option>
+      </select>
+    </label>
+    <button id="connect">Connect YouTube tab</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+  <fieldset id="controls" disabled>
+    <legend>Listen</legend>
+    <div id="modes" role="group" aria-label="Listening mode">
+      <button data-mode="original" aria-pressed="true">Original</button>
+      <button data-mode="unity" aria-pressed="false">Processed 0</button>
+      <button data-mode="down" aria-pressed="false">Down 3</button>
+      <button data-mode="up" aria-pressed="false">Up 3</button>
+      <button data-mode="steps" aria-pressed="false">Alternate −3 / +3</button>
+    </div>
+    <label class="inline"><input id="formants" type="checkbox" checked> Preserve vocal character</label>
+    <label class="inline">Change pitch every
+      <select id="interval"><option value="1000">1 second</option><option value="250" selected>250 ms</option><option value="100">100 ms</option></select>
+    </label>
+  </fieldset>
+  <p id="status" role="status">Ready. Playback starts with Original selected.</p>
+  <p id="meter" class="muted">Both paths use the same volume and buffering delay.</p>
+  <p class="muted">Stop restores playback in the source tab. To compare engine settings, stop and reconnect. The shorter window may respond faster but sound rougher.</p>
+  <details>
+    <summary>Developer checks</summary>
+    <p>These check pitch, latency, stereo, and changes in Chrome. They do not establish sound quality on a voice.</p>
+    <button id="check">Run muted signal checks</button>
+    <pre id="checks"></pre>
+  </details>
+  <script type="module" src="pitch-engine.mjs"></script>
+</body>
+</html>

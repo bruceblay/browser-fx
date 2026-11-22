@@ -1,10 +1,17 @@
 # Chrome Web Store Content for Browser FX
 
-**Current version: 0.3.0**
+**Current version: 0.4.0**
 
 The canonical listing copy lives in `docs/store-description.txt`. Paste that file
 into the store's Detailed Description field. This document holds everything
 else the listing form asks for, plus the counts that have to stay in sync.
+
+> **Do not paste keyword lists into the listing.** The 0.3.0 submission was
+> rejected for Keyword Spam (ref: Yellow Argon) because the Detailed Description
+> contained all 23 effect names as a `•`-separated run. The effect and preset
+> lists below are internal reference only. In the listing itself, describe what
+> the effects do in prose. Same rule for the manifest `description` in
+> `package.json` and the store's Short Description field.
 
 ## Facts to keep in sync
 
@@ -13,11 +20,11 @@ Update these everywhere when they change: `docs/store-description.txt`, the
 
 | | Current |
 |---|---|
-| Effects | 23 |
+| Effects | 24 |
 | Factory presets | 8 |
 | Max chain length | 4 |
 
-Effects: Bitcrusher, CD Skipper, Reverb, Hall Reverb, Filter, Auto Filter,
+Effects: Bitcrusher, Auto Tune, CD Skipper, Reverb, Hall Reverb, Filter, Auto Filter,
 Comb Filter, Delay, Tap Delay, Distortion, Chorus, Phaser, Flanger, Tremolo,
 Vibrato, Auto Panner, Pitch Shifter, Ring Mod, Compressor, DJ EQ, Tape Stop,
 Lo-Fi Tape, Utility
@@ -27,23 +34,37 @@ Dub Echo, Mono, Cyborg
 
 ## Short Description (132 characters max)
 
-**Current: 108 characters**
+**Current: 117 characters**
 ```
-Real-time audio effects for any browser tab. Chain up to 4, control them with MIDI, save your own presets.
+Real-time audio effects, including Auto Tune, for any browser tab. Chain up to 4 effects, use MIDI, and save presets.
 ```
 
-## What's New in 0.3.0
+## What's New in 0.4.0
 
 Short changelog for the store's update notes.
 
 ```
-• New Utility effect: gain, pan, and stereo width on three knobs. Turn Width
-  fully down to sum any tab to mono.
-• New Mono preset, one click to a mono-summed tab.
-• Lower latency. Processed audio now goes straight to your speakers instead of
-  through an extra playback stage.
-• Switching effects off and back on no longer drops the audio for a moment.
+• New Auto Tune effect: snap solo vocals to a musical key and scale.
+• Four controls: Key, Scale, Retune, and Mix. Choose chromatic, major, minor,
+  or pentatonic scales, with fast snapping or slower pitch glides.
+• Find Auto Tune directly below Bitcrusher in the effect selector. Use it in
+  your effect chains, saved presets, and MIDI mappings.
+• Browser FX now includes 24 effects. All audio processing stays on your device.
 ```
+
+Release build: `npm ci && npm run release`. Upload `build/chrome-mv3-prod.zip`.
+The submission workflow remains manually triggered; running the local release
+command only tests, builds, and packages the extension. The prepared upload bundle
+is in `build/release-0.4.0/`, with the versioned ZIP, release notes, detailed store
+description, and SHA-256 checksums. Nothing has been submitted.
+
+Release validation: all 16 Auto Tune tests and the Chrome integration checks pass.
+The ZIP contains the generated worklet and third-party notices, and requests the
+same permissions as 0.3.0. Chrome 116 is now declared as the minimum version to
+match the existing service-worker-to-offscreen capture path. The repository-wide
+TypeScript check still reports the 22 pre-existing errors reproduced on the base
+commit; production bundling succeeds. Screenshots and promotional tiles have not
+been refreshed for this release.
 
 ## Category
 
@@ -130,7 +151,8 @@ Browser FX applies real-time audio effects to browser tab audio content.
 
 ### Key Benefits (for promotional materials)
 ```
-• 23 audio effects, chainable up to 4 at a time
+• 24 audio effects, chainable up to 4 at a time
+• Auto Tune for musical vocal pitch correction, from hard snapping to smooth glides
 • Real-time processing, all local
 • Per-tab effect management
 • Hardware MIDI control with one-click learn
@@ -166,16 +188,18 @@ Secondary: Students, developers, general users who consume web audio
 
 ## Pre-Upload Checklist
 
-- [ ] Bump `version` in `package.json`
-- [ ] `npm run build`
-- [ ] Zip the *contents* of `build/chrome-mv3-prod`
+- [x] Bump `version` in `package.json` and `package-lock.json` to 0.4.0
+- [x] Production build and all 16 Auto Tune tests pass
+- [x] Package and verify `build/release-0.4.0/browser-fx-0.4.0.zip`
+- [x] Chrome checks: packaged worklet, chain, live controls, slot/master bypass
+- [x] Verify worklet and license notices are included
 - [ ] Refresh screenshots if the UI changed (1280x800 or 640x400)
 - [ ] Design promo tiles (440x280 and marquee)
 - [ ] Paste `docs/store-description.txt` into Detailed Description
 - [ ] Paste the What's New block into the update notes
-- [ ] Confirm permission justifications still match `package.json` manifest
+- [x] Confirm permissions match the previous release (no new permissions)
 - [ ] Select category: Productivity
 - [ ] Set visibility: Public
 - [ ] Submit for review
 
-**Estimated Review Time**: 24-48 hours
+Review timing is determined by the Chrome Web Store.

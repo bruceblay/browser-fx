@@ -1,8 +1,13 @@
 # Browser FX
 
-Real-time audio effects for any browser tab: 22 effects with studio-style
+Real-time audio effects for any browser tab: 24 effects, including Auto Tune, with studio-style
 knobs, an audio-reactive cymatic visualizer, and MIDI controller support.
 Built with the Web Audio API and Chrome's Tab Capture API.
+
+Auto Tune snaps solo vocals to a chosen key and scale, with controls for retune
+speed and mix. Use fast retuning for an obvious tuned sound or slower settings
+for pitch glides. Major, minor, and pentatonic scales are available alongside
+chromatic tuning. [Auto Tune details and listening test](docs/autotune.md).
 
 - **Install**: [Chrome Web Store](https://chromewebstore.google.com/detail/browser-fx/oanepaeodkjbadgpgkolbidpbflbmmmd)
 - **Demo video**: [YouTube](https://www.youtube.com/watch?v=2FvHIQayIIM)
@@ -11,7 +16,7 @@ Built with the Web Audio API and Chrome's Tab Capture API.
 ## 🛠️ Development Setup
 
 ### Prerequisites
-- Node.js 18+ and npm
+- Node.js 24 and npm
 - Google Chrome browser
 - Basic understanding of Chrome extensions and Web Audio API
 
@@ -25,7 +30,7 @@ Built with the Web Audio API and Chrome's Tab Capture API.
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm ci
    ```
 
 3. **Build the extension**
@@ -45,18 +50,17 @@ Built with the Web Audio API and Chrome's Tab Capture API.
 
 ## 🎵 How to Use
 
-### Current Functionality (Phase 1)
 1. Navigate to a tab with audio content (YouTube, Spotify, etc.)
-2. Click the Tab Bitcrusher extension icon in your browser toolbar
-3. Click "Capture Tab Audio" - this will "steal" the audio from the tab
-4. Audio will now play through the extension in passthrough mode (no effects yet)
-5. Click "Stop Capture" to return audio to the original tab
+2. Click the Browser FX extension icon in your browser toolbar
+3. Load a preset or choose effects from the dropdown and stack up to four
+4. Click the power button to begin processing, then adjust the knobs as audio plays
+5. Click the power button again to stop processing
 
 ### ⚠️ Important Notes
 - **User Gesture Required**: Tab capture requires clicking the extension button (Chrome security requirement)
 - **Audio "Theft"**: When capturing, the original tab goes silent and audio routes through the extension
-- **Passthrough Mode**: Currently no effects are applied - audio passes through unchanged
-- **Single Tab**: Currently only supports one tab at a time
+- **Per-Tab Effects**: Each tab can have its own effect chain and settings
+- **Auto Tune**: Works best on a solo voice; it does not isolate vocals from accompaniment
 
 ## 🏗️ Architecture
 
@@ -82,7 +86,7 @@ Built with the Web Audio API and Chrome's Tab Capture API.
 
 - **`background.ts`**: Service worker handling tab capture and offscreen document lifecycle
 - **`popup.tsx`**: React-based UI for controlling audio capture and effects
-- **`offscreen.ts`**: Web Audio processing in persistent context
+- **`offscreen-effects.js`**: Web Audio processing in persistent context
 - **`offscreen.html`**: HTML container for the offscreen audio processor
 
 ## 📋 Development Scripts
@@ -94,11 +98,9 @@ npm run dev
 # Build for production
 npm run build
 
-# Package extension for distribution
-npm run package
-
-# Format code
-npm run format
+# Test, build, and package for distribution
+npm run release
+# Upload artifact: build/chrome-mv3-prod.zip
 ```
 
 ## 🔧 Technical Details
@@ -110,22 +112,19 @@ npm run format
 ### Web Audio API Usage
 - **AudioContext**: Created in offscreen document for stability
 - **MediaStreamAudioSourceNode**: Processes captured tab audio
-- **MediaStreamAudioDestinationNode**: Outputs processed audio
-- **Audio Element**: Plays the processed stream back to user
+- **AudioDestinationNode**: Sends processed audio directly to the speakers
+- **AudioWorkletNode**: Runs Auto Tune detection and synthesis with bundled WASM
 
 ### Browser Compatibility
-- **Chrome 88+**: Required for Offscreen Documents API
-- **Chrome 71+**: Required for Tab Capture API improvements
+- **Chrome 116+**: Required to use a service worker’s tab-capture stream ID in the offscreen document
 - **Manifest V3**: Modern extension architecture
 
 ## 🚨 Known Limitations
 
-### Current Phase 1 Limitations
-- Only passthrough audio (no effects yet)
-- Single tab support only
-- No effect parameter controls
-- Basic error handling
-- MediaStream transfer between contexts needs refinement
+### Effect Limitations
+- Chains support up to four effects
+- Auto Tune adds 90 ms of processing delay per instance, plus capture and device latency
+- Automatic pitch tracking can be unreliable with overlapping voices or full music mixes
 
 ### Chrome API Limitations
 - Tab capture requires user gesture (security requirement)
@@ -137,20 +136,16 @@ npm run format
 
 See `/docs/implementation.md` for detailed implementation phases and testing criteria.
 
-### Upcoming Features
-- **Audio Effects**: Delay, bitcrusher, and phaser effects
-- **Multi-Tab Processing**: Apply effects to multiple tabs simultaneously
-- **Real-Time Controls**: Live parameter adjustment without audio interruption
-- **Preset System**: Save and load effect configurations
-- **Performance Optimization**: AudioWorklet implementation for low-latency processing
+The extension currently includes 24 effects, per-tab chains, real-time controls,
+saved presets, and MIDI support. Future work includes improving effect quality
+and reducing processing latency.
 
 ## 🤝 Contributing
 
-This project is in active development. Phase 1 (foundation) is complete.
+This project is in active development.
 
 ### Current Development Focus
-- Phase 2: Implementing proper Web Audio routing and playback
-- MediaStream transfer optimization between service worker and offscreen contexts
+- Effect quality and musical control
 - Audio latency reduction and performance improvements
 
 ### Development Guidelines

@@ -1,4 +1,4 @@
-import { getEffectsList } from "../effects"
+import { getEffectConfig, getEffectsList } from "../effects"
 import { theme } from "../theme"
 
 interface EffectSelectorProps {
@@ -11,6 +11,7 @@ export function EffectSelector({ selectedEffect, onEffectChange }: EffectSelecto
     <div style={{ position: 'relative' }}>
       <select
         value={selectedEffect}
+        title={getEffectConfig(selectedEffect)?.description}
         onChange={(e) => onEffectChange(e.target.value)}
         style={{
           width: '100%',

@@ -1,0 +1,14 @@
+body { font: 16px/1.5 system-ui; max-width: 820px; margin: 40px auto; padding: 0 24px; color: #eee; background: #202024; }
+h1 { line-height: 1.2; }
+button, select { font: inherit; padding: 10px 12px; border-radius: 5px; }
+button { cursor: pointer; border: 1px solid #74747e; color: #eee; background: #34343d; }
+button:disabled { opacity: .45; cursor: default; }
+button[aria-pressed="true"], #connect { background: #c780e8; color: #17131c; border-color: #c780e8; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #e9c7ff; outline-offset: 3px; }
+.setup, #modes { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.setup label { display: flex; flex-direction: column; gap: 5px; }
+fieldset { margin: 24px 0; border: 1px solid #74747e; border-radius: 6px; }
+.inline { display: inline-flex; align-items: center; gap: 8px; margin: 16px 18px 8px 0; }
+.muted { color: #bcbcc8; font-size: 14px; }
+#status, pre { background: #303036; padding: 16px; border-radius: 5px; white-space: pre-wrap; }
+details { margin-top: 32px; }

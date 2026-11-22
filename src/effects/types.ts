@@ -8,6 +8,8 @@ export interface ParameterConfig {
   step: number
   default: number
   unit?: string
+  // Labels for stepped numeric parameters; stored values and MIDI stay numeric.
+  valueLabels?: string[]
 }
 
 export interface EffectConfig {
