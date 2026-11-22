@@ -34,6 +34,25 @@ function sendToOffscreen(message: Record<string, unknown>) {
   })
 }
 
+// Stop any existing stream for a tab in the offscreen document and wait for
+// cleanup before calling getMediaStreamId(), preventing "Cannot capture a tab
+// with an active stream" races. Bounded so a slow startup can never hang.
+async function awaitStopStream(tabId: number): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      chrome.runtime.sendMessage({ type: "STOP_STREAM", tabId }).catch(() => {
+        console.log(`No offscreen document to receive STOP_STREAM for tab ${tabId}, skipping`)
+      }),
+      new Promise<void>((resolve) => {
+        timeoutId = setTimeout(resolve, 500)
+      })
+    ])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
+
 // Forward a message to the offscreen document with the active tab's id attached
 function forwardWithActiveTab(message: Record<string, unknown>) {
   chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
@@ -56,12 +75,9 @@ async function startCapture(message: { chain?: unknown }) {
 
   console.log("Active tab found:", activeTab.id)
 
-  // Quick cleanup attempt (don't wait for response to avoid timeout)
-  console.log("Attempting quick cleanup for tab:", activeTab.id)
-  sendToOffscreen({
-    type: "STOP_STREAM",
-    tabId: activeTab.id
-  })
+  // Ensure any stale stream for this tab is released before requesting a new stream ID
+  console.log("Cleaning up any existing stream for tab:", activeTab.id)
+  await awaitStopStream(activeTab.id)
 
   // Capture tab audio using correct MV3 API
   const streamId = await chrome.tabCapture.getMediaStreamId()
