@@ -15,8 +15,8 @@ async function ensureOffscreenDocument() {
   console.log("Creating offscreen document...")
   await chrome.offscreen.createDocument({
     url: 'offscreen.html',
-    reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
-    justification: 'Process tab audio with Web Audio API'
+    reasons: [chrome.offscreen.Reason.USER_MEDIA, chrome.offscreen.Reason.AUDIO_PLAYBACK],
+    justification: 'Capture tab audio via getUserMedia and process/play it with Web Audio API'
   })
 
   const extensionId = chrome.runtime.id
