@@ -49,6 +49,7 @@
       "https://*/*"
     ],
     "permissions": [
+      "activeTab",
       "tabCapture",
       "offscreen",
       "storage"
