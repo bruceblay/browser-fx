@@ -34,41 +34,56 @@ function sendToOffscreen(message: Record<string, unknown>) {
   })
 }
 
+// Resolve the target tab id: prefer an explicit tabId from the popup (which
+// has a real window context), falling back to lastFocusedWindow since service
+// workers have no window of their own and currentWindow: true is unreliable.
+async function resolveActiveTabId(tabId?: number): Promise<number | undefined> {
+  if (typeof tabId === "number") return tabId
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+  return activeTab?.id
+}
+
 // Forward a message to the offscreen document with the active tab's id attached
 function forwardWithActiveTab(message: Record<string, unknown>) {
-  chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([activeTab]) => {
     sendToOffscreen({ ...message, tabId: activeTab?.id })
   })
 }
 
-async function startCapture(message: { chain?: unknown }) {
+async function startCapture(message: { chain?: unknown; tabId?: number }) {
   console.log("Processing START_CAPTURE request")
 
-  // Parallelize offscreen creation and tab query for speed
-  const [_, [activeTab]] = await Promise.all([
+  // Parallelize offscreen creation and tab resolution for speed
+  const [_, tabId] = await Promise.all([
     ensureOffscreenDocument(),
-    chrome.tabs.query({ active: true, currentWindow: true })
+    resolveActiveTabId(message.tabId)
   ])
 
-  if (!activeTab || !activeTab.id) {
+  if (tabId === undefined) {
     throw new Error("No active tab found")
   }
 
-  console.log("Active tab found:", activeTab.id)
+  console.log("Active tab found:", tabId)
 
   // Quick cleanup attempt (don't wait for response to avoid timeout)
-  console.log("Attempting quick cleanup for tab:", activeTab.id)
+  console.log("Attempting quick cleanup for tab:", tabId)
   sendToOffscreen({
     type: "STOP_STREAM",
-    tabId: activeTab.id
+    tabId
   })
 
-  // Capture tab audio using correct MV3 API
-  const streamId = await chrome.tabCapture.getMediaStreamId()
-
-  if (!streamId) {
-    throw new Error("Failed to capture tab audio")
-  }
+  // Capture the specific target tab using the MV3 stream ID API
+  const streamId = await new Promise<string>((resolve, reject) => {
+    chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (id) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message))
+      } else if (!id) {
+        reject(new Error("Failed to capture tab audio"))
+      } else {
+        resolve(id)
+      }
+    })
+  })
 
   console.log("Got stream ID:", streamId)
 
@@ -94,7 +109,7 @@ async function startCapture(message: { chain?: unknown }) {
       type: "PROCESS_STREAM",
       streamId: streamId,
       chain: message.chain,
-      tabId: activeTab.id
+      tabId
     })
   } catch (error) {
     // The stream is already handed off at this point; a lost response port
