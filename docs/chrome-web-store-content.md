@@ -73,6 +73,11 @@ been refreshed for this release.
 
 ## Permission Justifications
 
+### activeTab
+```
+Grants temporary access to the currently active tab only when the user clicks the extension icon, enabling reliable tab audio capture across any webpage (including non-HTTPS pages) without broadening background access.
+```
+
 ### tabCapture
 ```
 Required to capture audio streams from browser tabs for real-time audio effects processing. This permission is essential for the core functionality of applying audio effects to tab audio content.
