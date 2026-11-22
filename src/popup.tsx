@@ -50,12 +50,42 @@ const defaultSlot = (effectId: string): ChainSlot => ({
 const slotsSignature = (c: Array<{ effectId: string; params: Record<string, number>; enabled: boolean }>) =>
   JSON.stringify(c.map(s => ({ effectId: s.effectId, params: s.params, enabled: s.enabled })))
 
+// Map raw Chrome tabCapture / getUserMedia errors to short, actionable copy
+// for the compact popup footer. The raw string stays in the hover tooltip.
+function formatCaptureError(raw?: string): string {
+  const msg = (raw || "").trim()
+  const lower = msg.toLowerCase()
+  if (lower.includes("active stream")) {
+    return "another extension is capturing this tab"
+  }
+  if (lower.includes("chrome pages cannot be captured") || lower.includes("chrome://")) {
+    return "chrome pages can't be captured — try a website tab"
+  }
+  if (lower.includes("not been invoked") || lower.includes("activetab")) {
+    return "can't capture this page — try a regular website tab"
+  }
+  if (lower.includes("no active tab")) {
+    return "no active tab found — click a tab and retry"
+  }
+  if (lower.includes("notallowederror") || lower.includes("permission")) {
+    return "audio capture was blocked by browser permissions"
+  }
+  if (lower.includes("notreadableerror") || lower.includes("aborterror")) {
+    return "tab audio unavailable — reload tab and retry"
+  }
+  if (msg) {
+    const clean = msg.replace(/^Error:\s*/i, "")
+    return clean.length > 52 ? `capture failed: ${clean.slice(0, 49)}...` : `capture failed: ${clean}`
+  }
+  return "capture failed — try another tab or retry"
+}
+
 function IndexPopup() {
   const [isCapturing, setIsCapturing] = useState(false)
   const [chain, setChain] = useState<ChainSlot[]>([defaultSlot("bitcrusher")])
   const [showAbout, setShowAbout] = useState(false)
   const [currentTabId, setCurrentTabId] = useState<number | null>(null)
-  const [startFailed, setStartFailed] = useState(false)
+  const [startError, setStartError] = useState<{ message: string; raw?: string } | null>(null)
   const [midiLearn, setMidiLearn] = useState(false)
   // knob is a parameter index, or 'toggle' for the slot's bypass LED
   const [midiLearnTarget, setMidiLearnTarget] = useState<{ slot: number; knob: number | 'toggle' } | null>(null)
@@ -84,6 +114,7 @@ function IndexPopup() {
   const canAdd = chain.length < MAX_CHAIN && !midiLearn
   const popupHeight = POPUP_HEIGHTS[chain.length - 1]
     + (midiLearn ? 34 : 0)
+    + (!midiLearn && !isCapturing && startError ? 12 : 0)
     - (!showFooterHint && !canAdd ? 22 : 0)
 
   const activePreset = activePresetId
@@ -341,7 +372,7 @@ function IndexPopup() {
     // crossfade. Re-running the capture handoff here is what used to drop audio
     // for a moment on every toggle.
     if (streamLive.current) {
-      setStartFailed(false)
+      setStartError(null)
       setIsCapturing(true)
       // Push the chain first: edits made while bypassed never reached offscreen
       sendChain(chain)
@@ -350,7 +381,7 @@ function IndexPopup() {
     }
 
     startPending.current = true
-    setStartFailed(false)
+    setStartError(null)
     setIsCapturing(true)
 
     // Set a timeout to handle message port issues
@@ -372,7 +403,7 @@ function IndexPopup() {
         // Only revert state for genuine errors, not timeouts
         if (!error.includes("message port closed")) {
           setIsCapturing(false)
-          setStartFailed(true)
+          setStartError({ message: formatCaptureError(error), raw: error })
         } else {
           console.log("Message port timeout, but capture may still be working")
         }
@@ -382,7 +413,7 @@ function IndexPopup() {
       if (!response?.success) {
         console.error("Failed to start capture:", response?.error)
         setIsCapturing(false)
-        setStartFailed(true)
+        setStartError({ message: formatCaptureError(response?.error), raw: response?.error })
       } else {
         console.log("Capture started successfully")
         streamLive.current = true
@@ -408,7 +439,7 @@ function IndexPopup() {
 
   const handleClearStreams = () => {
     setIsCapturing(false)
-    setStartFailed(false)
+    setStartError(null)
     streamLive.current = false
     chrome.runtime.sendMessage({
       type: "CLEAR_ALL_STREAMS"
@@ -781,7 +812,8 @@ function IndexPopup() {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: !midiLearn && startError && canAdd ? 'flex-start' : 'center',
+      paddingRight: !midiLearn && startError && canAdd ? 92 : 0,
       minHeight: 20
     }}>
       {midiLearn ? (
@@ -825,25 +857,27 @@ function IndexPopup() {
       ) : !isCapturing && (
         <button
           onClick={handleStartCapture}
-          title="Start audio capture"
+          title={startError?.raw ? `${startError.raw} (click to retry)` : "Start audio capture"}
           style={{
             background: 'none',
             border: 'none',
-            padding: '4px 8px',
+            padding: startError ? '2px 4px' : '4px 8px',
             fontFamily: 'inherit',
             fontSize: 10,
-            color: startFailed ? '#e0796a' : theme.textFaint,
+            lineHeight: 1.3,
+            textAlign: startError && canAdd ? 'left' : 'center',
+            color: startError ? '#e0796a' : theme.textFaint,
             textTransform: 'lowercase',
             letterSpacing: '0.3px',
             cursor: 'pointer',
             userSelect: 'none',
             transition: 'color 0.15s ease'
           }}
-          onMouseOver={(e) => { e.currentTarget.style.color = startFailed ? '#eda093' : theme.textDim }}
-          onMouseOut={(e) => { e.currentTarget.style.color = startFailed ? '#e0796a' : theme.textFaint }}
+          onMouseOver={(e) => { e.currentTarget.style.color = startError ? '#eda093' : theme.textDim }}
+          onMouseOut={(e) => { e.currentTarget.style.color = startError ? '#e0796a' : theme.textFaint }}
         >
-          {startFailed
-            ? <>capture failed, press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to retry</>
+          {startError
+            ? startError.message
             : <>press <span style={{ color: theme.led, padding: '0 2px' }}>●</span> to start</>}
         </button>
       )}
